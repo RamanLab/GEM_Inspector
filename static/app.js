@@ -104,8 +104,9 @@ analyzeBtn.addEventListener("click", async () => {
     DATA.exchanges = []; // Will be filled by streaming
     sortState = {};
     COMP_NAMES = Object.fromEntries((DATA.stats.compartment_details || []).map(c => [c.id, c.name]));
-    $("debugTab").style.display = "none";
-    $("debug").innerHTML = "";
+    renderDebugDefault([], []);
+    BALANCE_RESULT = null;
+    PRECURSOR_RESULT = null;
     TRACER_RESULT = null;
     TRACER_KO_VIEW = "before";
     TRACER_HIGHLIGHT_KO = true;
@@ -116,10 +117,12 @@ analyzeBtn.addEventListener("click", async () => {
     FROG_RESULT = null;
     if (CURRENT_FROG_EVENTSOURCE) { CURRENT_FROG_EVENTSOURCE.close(); CURRENT_FROG_EVENTSOURCE = null; }
     closeReportModal();
+    resetMemote();
 
     // Show initial results
     renderAll();
     $("app").classList.remove("hidden");
+    goToTab("overview"); // Overview is always the landing page for a new model
     status.textContent = "Performing exchange knockouts…";
 
     // Phase 2: Stream KO analysis
@@ -245,12 +248,48 @@ function updateProgressBar(current, total) {
   progressSet("mainProgress", Math.round((current / total) * 100));
 }
 
+// ---- Navigation: 4 modules (+ References) on top, sub-tabs under each. ----
+// Every sub-tab is still a `.tab[data-tab]` button controlling the `.panel`
+// with that id, so existing code (e.g. `$("debugTab").click()`) keeps working.
+const LAST_TAB_IN_MODULE = {};
+
+function showModule(moduleId) {
+  document.querySelectorAll(".modbtn").forEach(b => b.classList.toggle("active", b.dataset.module === moduleId));
+  document.querySelectorAll(".subnav").forEach(n => n.classList.toggle("hidden", n.dataset.module !== moduleId));
+}
+
+function goToTab(tabId) {
+  const btn = document.querySelector(`.tab[data-tab="${tabId}"]`);
+  if (btn) btn.click();
+}
+
 document.querySelectorAll(".tab").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
     document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
     btn.classList.add("active");
     $(btn.dataset.tab).classList.add("active");
+    const nav = btn.closest(".subnav");
+    if (nav) {
+      LAST_TAB_IN_MODULE[nav.dataset.module] = btn.dataset.tab;
+      showModule(nav.dataset.module);
+    }
+  });
+});
+
+document.querySelectorAll(".modbtn").forEach(mb => {
+  mb.addEventListener("click", () => {
+    const m = mb.dataset.module;
+    if (m === "references") {
+      document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+      document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
+      $("references").classList.add("active");
+      showModule("references");
+      return;
+    }
+    const target = LAST_TAB_IN_MODULE[m]
+      || document.querySelector(`.subnav[data-module="${m}"] .tab`)?.dataset.tab;
+    if (target) goToTab(target);
   });
 });
 
@@ -499,6 +538,10 @@ function renderAll() {
   renderNetworkGaps();
   renderTracer();
   renderFrog();
+  renderAnnotation();
+  renderReferences();
+  renderBalance();
+  renderPrecursors();
 }
 
 function renderSummary() {
@@ -603,13 +646,7 @@ function renderOverview() {
       <div class="mini-stat"><div class="mini-stat-value">${escapeHtml(s.solver)}</div><div class="mini-stat-label">Solver</div></div>
     </div>
 
-    <h3>ID namespace &amp; compartment annotation</h3>
-    <div class="objective-grid">
-      ${annotationCardHtml("ID namespace — metabolites", ns.label, ns.example, ns.coverage != null ? ns.coverage * 100 : null)}
-      ${annotationCardHtml("ID namespace — reactions", nsR.label, nsR.example, nsR.coverage != null ? nsR.coverage * 100 : null)}
-      ${annotationCardHtml("Compartment annotation", conv.label, conv.example, null)}
-    </div>
-    ${namespaceAuditWarningsHtml(15)}
+    <div id="memoteBox"></div>
 
     <h3>Compartments</h3>
     <div class="chip-row">${s.compartment_details.map(c => {
@@ -628,6 +665,24 @@ function renderOverview() {
     <h3>Analysis rule</h3>
     <div class="note">${escapeHtml(DATA.essentiality_rule)}</div>
     <div class="note">${escapeHtml(DATA.transport_rule)}</div>
+  `;
+  renderMemoteBox();
+}
+
+function renderAnnotation() {
+  const s = DATA.stats;
+  const ns = s.namespace_metabolites || {};
+  const nsR = s.namespace_reactions || {};
+  const conv = s.compartment_convention || {};
+  $("annotation").innerHTML = `
+    <h2>ID namespaces &amp; annotation</h2>
+    <p class="memote-desc">Which identifier convention the model uses for metabolites, reactions and compartments, and how consistently. More annotation and translation tools will be added to this module.</p>
+    <div class="objective-grid">
+      ${annotationCardHtml("ID namespace — metabolites", ns.label, ns.example, ns.coverage != null ? ns.coverage * 100 : null)}
+      ${annotationCardHtml("ID namespace — reactions", nsR.label, nsR.example, nsR.coverage != null ? nsR.coverage * 100 : null)}
+      ${annotationCardHtml("Compartment annotation", conv.label, conv.example, null)}
+    </div>
+    ${namespaceAuditWarningsHtml(15)}
   `;
 }
 
@@ -666,11 +721,11 @@ function reactionStatsHtml(rows) {
       ${typeCards}
       <div class="mini-stat" title="Fraction of reactions that have a gene-protein-reaction (GPR) rule assigned.">
         <div class="mini-stat-value">${total ? fmt(100 * withGpr / total, 1) : "0"}%</div>
-        <div class="mini-stat-label">Have a GPR <span class="stoich">${withGpr}/${total}</span></div>
+        <div class="mini-stat-label">have a GPR <span class="stoich">${withGpr}/${total}</span></div>
       </div>
       <div class="mini-stat" title="Fraction of reactions that have a subsystem assigned.">
         <div class="mini-stat-value">${total ? fmt(100 * withSub / total, 1) : "0"}%</div>
-        <div class="mini-stat-label">Have a subsystem <span class="stoich">${withSub}/${total}</span></div>
+        <div class="mini-stat-label">have a subsystem <span class="stoich">${withSub}/${total}</span></div>
       </div>
     </div>
   `;
@@ -685,7 +740,25 @@ const REACTION_TABLE_COLUMNS = [
   { key: "gene_reaction_rule", label: "GPR" },
   { key: "compartments", label: "Compartment", value: r => (r.compartments || []).map(c => COMP_NAMES[c] || c).join("; ") },
   { key: "wt_flux", label: "WT flux" },
+  { key: "balance", label: "Balance" },
+  { key: "balance_detail", label: "Imbalance / note" },
 ];
+
+const BALANCE_INFO = {
+  balanced: "Every element (and the charge, where charges are given) sums to zero across the reaction.",
+  unbalanced: "At least one element or the charge does not balance. Click to see what is wrong.",
+  unknown: "Can't be checked: one or more metabolites has no chemical formula. Click to see which.",
+  "n/a": "Not expected to balance: exchange/demand/sink and biomass/objective reactions are skipped.",
+};
+
+function balanceBadge(r) {
+  const st = r.balance || "n/a";
+  const tip = `${BALANCE_INFO[st] || ""}${r.balance_detail ? " " + r.balance_detail : ""}`;
+  if (st === "unbalanced" || st === "unknown") {
+    return `<a class="badge ${st === "unbalanced" ? "bad" : "warn"} bal-link" data-rxn="${escapeHtml(r.id)}" title="${escapeHtml(tip)}">${st} ↗</a>`;
+  }
+  return `<span class="badge ${st === "balanced" ? "good" : ""}" title="${escapeHtml(tip)}">${escapeHtml(st)}</span>`;
+}
 
 let rxnCurrentRows = [];
 
@@ -708,12 +781,20 @@ function renderReactions() {
         <option value="has">GPR: has a rule</option>
         <option value="none">GPR: no rule</option>
       </select>
+      <select id="rxnBalance">
+        <option value="">Balance: all</option>
+        <option value="balanced">Balance: balanced</option>
+        <option value="unbalanced">Balance: unbalanced</option>
+        <option value="unknown">Balance: can't check (no formula)</option>
+        <option value="n/a">Balance: not applicable</option>
+      </select>
       <select id="rxnComp">
         <option value="">All compartments</option>
         ${[...new Set(DATA.reactions.flatMap(r => r.compartments || []))].sort().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(COMP_NAMES[c] || c)}</option>`).join("")}
       </select>
       <span id="rxnCount"></span>
     </div>
+    <div id="rxnBalanceBar" class="note hidden"></div>
     <div class="table-wrap"><table id="rxnTable">
       <thead><tr>
         <th data-key="id">Original ID</th>
@@ -722,8 +803,9 @@ function renderReactions() {
         <th data-key="type">Type</th>
         <th data-key="subsystem">Subsystem</th>
         <th data-key="gene_reaction_rule">GPR</th>
-        <th data-key="compartments">Comp</th>
+        <th data-key="compartments">Compartment</th>
         <th data-key="wt_flux">WT flux</th>
+        <th data-key="balance" title="Mass/charge balance of the reaction">Balance</th>
       </tr></thead>
       <tbody id="rxnBody"></tbody>
     </table></div>
@@ -735,14 +817,25 @@ function renderReactions() {
     const mapped = $("rxnMapped").value;
     const gpr = $("rxnGpr").value;
     const comp = $("rxnComp").value;
+    const bal = $("rxnBalance").value;
     const rows = filtered ? filtered : DATA.reactions.filter(r =>
       (!q || `${r.id} ${r.metanetx_id || ""} ${r.name} ${r.subsystem} ${r.gene_reaction_rule}`.toLowerCase().includes(q)) &&
       (!type || r.type === type) && (!sub || r.subsystem === sub) &&
       (!mapped || (mapped === "mapped" ? !!r.metanetx_id : !r.metanetx_id)) &&
       (!gpr || (gpr === "has" ? !!(r.gene_reaction_rule || "").trim() : !(r.gene_reaction_rule || "").trim())) &&
-      (!comp || (r.compartments || []).includes(comp))
+      (!comp || (r.compartments || []).includes(comp)) &&
+      (!bal || (r.balance || "n/a") === bal)
     );
     rxnCurrentRows = rows;
+    const bar = $("rxnBalanceBar");
+    if (bal === "unbalanced" || bal === "unknown") {
+      bar.classList.remove("hidden");
+      bar.innerHTML = `<strong>${rows.length}</strong> reaction(s) ${bal === "unbalanced" ? "are not mass/charge balanced" : "can't be checked (missing formulas)"}. ` +
+        `<button type="button" id="rxnBalanceGo">See what's wrong in Diagnostics → Reaction Balance</button>`;
+      $("rxnBalanceGo").addEventListener("click", () => openBalanceDiagnostics(null, bal));
+    } else {
+      bar.classList.add("hidden");
+    }
     $("rxnCount").textContent = `${rows.length} / ${DATA.reactions.length}`;
     $("rxnBody").innerHTML = rows.map(r => `<tr class="${r.metanetx_id ? "" : "row-unmapped"}" title="${r.metanetx_id ? "" : "Not mapped to MetaNetX -- see the warning in the Overview tab"}">
       <td><strong>${escapeHtml(r.id)}</strong></td>
@@ -752,9 +845,11 @@ function renderReactions() {
       <td class="wrap">${escapeHtml(r.gene_reaction_rule || "—")}</td>
       <td>${compartmentBadges(r.compartments)}</td>
       <td class="num">${fmt(r.wt_flux)}</td>
+      <td>${balanceBadge(r)}</td>
     </tr>`).join("");
+    $("rxnBody").querySelectorAll(".bal-link").forEach(a => a.addEventListener("click", () => openBalanceDiagnostics(a.dataset.rxn)));
   };
-  ["rxnSearch","rxnType","rxnSubsystem","rxnMapped","rxnGpr","rxnComp"].forEach(id => $(id).addEventListener("input", () => redraw()));
+  ["rxnSearch","rxnType","rxnSubsystem","rxnMapped","rxnGpr","rxnComp","rxnBalance"].forEach(id => $(id).addEventListener("input", () => redraw()));
   redraw();
   setTimeout(() => makeSortable("rxnTable", DATA.reactions, redraw), 0);
   attachTableTools("rxnTable", $("reactions").querySelector(".toolbar"), REACTION_TABLE_COLUMNS, () => rxnCurrentRows, "reactions");
@@ -853,6 +948,7 @@ let exCurrentRows = [];
 function renderExchanges() {
   const exchanges = DATA.exchanges || [];
   const essentialExchanges = exchanges.filter(e => e.essential);
+  renderDebugDefault(exchanges, essentialExchanges);
   const tested = exchanges.filter(e => e.ko_growth !== null && e.ko_growth !== undefined);
   const avgFraction = tested.length
     ? tested.reduce((sum, e) => sum + (e.ko_growth_fraction || 0), 0) / tested.length
@@ -1074,6 +1170,9 @@ function objectiveReactionExpressionHtml(open) {
 function renderObjective() {
   $("objective").innerHTML = `
     ${objectiveReactionExpressionHtml()}
+    <div class="note bio-link" style="background:#eff6ff;border-color:#bfdbfe;color:#1e3a8a;">
+      Can the cell actually make every biomass precursor? <button type="button" id="objPrecBtn">Check precursor producibility →</button>
+    </div>
     <div class="toolbar">
       <input id="objSearch" type="text" placeholder="Filter metabolite or exchange…">
       <select id="objBiomassRole">
@@ -1126,6 +1225,7 @@ function renderObjective() {
     </tr>`).join("") : `<tr><td colspan="12" class="note">No objective metabolites found (or all filtered as common).</td></tr>`;
   };
 
+  $("objPrecBtn").addEventListener("click", () => goToTab("precursors"));
   ["objSearch","objBiomassRole"].forEach(id => $(id).addEventListener("input", () => redraw()));
   redraw();
   setTimeout(() => makeSortable("objTable", DATA.objective_metabolites || [], redraw), 0);
@@ -1628,9 +1728,21 @@ function renderDemandSinkAuditTable(rows) {
 // ---------------------------------------------------------------------------
 
 function showDebugModal(essentialExchanges) {
-  $("debugTab").style.display = "";
   renderDebugSelection(essentialExchanges);
   $("debugTab").click();
+}
+
+// The Exchange Debugging tab is always available. Until the exchange
+// essentiality analysis has finished it shows a short waiting message; once
+// done it shows the selection of essential exchanges to trace.
+function renderDebugDefault(exchanges, essentialExchanges) {
+  if (!exchanges || !exchanges.length) {
+    $("debug").innerHTML = `<div class="note">Exchange debugging starts from the essential exchanges found by the exchange essentiality analysis. That analysis is still running (or hasn't started) — this page fills in automatically when it finishes.</div>`;
+  } else if (!essentialExchanges.length) {
+    $("debug").innerHTML = `<div class="note" style="background:#ecfdf5;border-color:#a7f3d0;color:#047857;">No essential exchanges were found, so there is nothing to debug here. (Essential = knocking out the exchange drops growth below 5% of wild type.)</div>`;
+  } else {
+    renderDebugSelection(essentialExchanges);
+  }
 }
 
 function renderDebugSelection(essentialExchanges) {
@@ -3223,4 +3335,454 @@ async function runGenerateReport(getPath) {
     btn.disabled = false;
     progressDone("reportModalProgress");
   }
+}
+
+// ---------------------------------------------------------------------------
+// MEMOTE (run on request from the Overview page)
+// The run happens in a separate process on the server; this code starts it,
+// polls its progress, and shows the result. Polling continues while the user
+// is on other tabs, and a small status pill in the toolbar tracks it.
+// ---------------------------------------------------------------------------
+const MEMOTE_PAPER_URL = "https://doi.org/10.1038/s41587-020-0446-y";
+const MEMOTE_DOCS_URL = "https://memote.readthedocs.io/";
+let MEMOTE_STATE = null;      // last status payload from the server (or null)
+let MEMOTE_TIMER = null;
+let MEMOTE_SHOW_ALL = false;
+
+function resetMemote() {
+  if (MEMOTE_TIMER) { clearInterval(MEMOTE_TIMER); MEMOTE_TIMER = null; }
+  if (MODEL_ID_PREVIOUS_FOR_MEMOTE && MEMOTE_STATE && MEMOTE_STATE.status === "running") {
+    fetch(`/api/memote/${MODEL_ID_PREVIOUS_FOR_MEMOTE}/cancel`, { method: "POST" }).catch(() => {});
+  }
+  MEMOTE_STATE = null;
+  MEMOTE_SHOW_ALL = false;
+  MODEL_ID_PREVIOUS_FOR_MEMOTE = MODEL_ID;
+  updateMemotePill();
+}
+let MODEL_ID_PREVIOUS_FOR_MEMOTE = null;
+
+function memoteScoreColor(x) { return x >= 0.8 ? "#047857" : x >= 0.5 ? "#b45309" : "#b91c1c"; }
+function memotePct(x) { return x == null ? "—" : Math.round(x * 100) + "%"; }
+
+// Which tab shows the thing a MEMOTE test is about (best effort).
+function memoteTargetTab(name) {
+  if (/biomass|ngam|gam_/.test(name)) return ["objective", "Objective"];
+  if (/annotation|sbo|namespace|gene_product/.test(name)) return ["annotation", "Annotation"];
+  if (/blocked|orphan|deadend|disconnected|not_produced|not_consumed|cycle/.test(name)) return ["gaps", "Network Gaps & Audits"];
+  if (/metabolite|formula|charge_presence/.test(name) && !/reaction/.test(name)) return ["metabolites", "Metabolites"];
+  if (/reaction|gpr|transport|unbounded|stoich|mass_balance|charge_balance|protein_complex|oxygen/.test(name)) return ["reactions", "Reactions"];
+  return null;
+}
+
+function memoteStageText(st) {
+  if (st.stage === "retrying") return "The solver stopped unexpectedly; retrying with the exact (slower) solver…";
+  if (st.stage === "rendering") return "Building the report…";
+  if (st.stage === "testing" && st.total) return `Running check ${Math.min(st.done + 1, st.total)} of ${st.total}${st.current ? " — " + st.current.replace(/^test_/, "").replace(/_/g, " ") : ""}`;
+  return "Loading the model…";
+}
+
+function memoteIssueHtml(t) {
+  const target = memoteTargetTab(t.name);
+  const sample = (t.data_sample || []).slice(0, 15);
+  const more = t.data_count && t.data_count > sample.length ? `\n… and ${t.data_count - sample.length} more` : "";
+  return `
+    <details class="memote-issue">
+      <summary>
+        <span class="badge bad">${t.score != null ? memotePct(t.score) : "issue"}</span>
+        <strong>${escapeHtml(t.title)}</strong>
+        ${t.data_count != null ? `<span class="stoich">${t.data_count} affected</span>` : ""}
+        ${target ? `<button class="go-link" type="button" data-goto="${target[0]}">Look at ${escapeHtml(target[1])} →</button>` : ""}
+      </summary>
+      <div class="memote-issue-body">
+        ${t.summary ? `<div>${escapeHtml(t.summary)}</div>` : ""}
+        ${t.message ? `<div style="margin-top:6px;">${escapeHtml(t.message)}</div>` : ""}
+        ${sample.length ? `<code>${escapeHtml(sample.join("\n") + more)}</code>` : ""}
+      </div>
+    </details>`;
+}
+
+function memoteResultHtml(r) {
+  const tests = Object.values(r.tests);
+  const issues = tests.filter(t => t.scored && t.status === "issue").sort((a, b) => b.impact - a.impact);
+  const shown = MEMOTE_SHOW_ALL ? issues : issues.slice(0, 8);
+  const total = r.total_score;
+  const bars = r.sections.map(sec => `
+    <div class="memote-bar-row">
+      <span>${escapeHtml(sec.title)}</span>
+      <div class="memote-bar"><div style="width:${Math.round((sec.score || 0) * 100)}%; background:${memoteScoreColor(sec.score || 0)};"></div></div>
+      <strong>${memotePct(sec.score)}</strong>
+    </div>`).join("");
+  const statusBadge = t => t.status === "ok" ? '<span class="badge good">ok</span>'
+    : t.status === "issue" ? '<span class="badge bad">issue</span>'
+    : t.status === "info" ? '<span class="badge info">info</span>' : '<span class="badge skip">skipped</span>';
+  const allCards = r.cards.map(c => `
+    <details class="memote-issue">
+      <summary><strong>${escapeHtml(c.title)}</strong></summary>
+      <div class="memote-issue-body">
+        <table><tbody>${c.sections.flatMap(sec => sec.tests).map(n => {
+          const t = r.tests[n];
+          return `<tr><td>${escapeHtml(t.title)}</td><td>${statusBadge(t)}</td><td>${t.data_count != null ? t.data_count : ""}</td></tr>`;
+        }).join("")}</tbody></table>
+      </div>
+    </details>`).join("");
+  const m = r.meta || {};
+  return `
+    <div class="memote-score">
+      <div><div class="memote-score-num" style="color:${memoteScoreColor(total || 0)}">${memotePct(total)}</div>
+        <div class="mini-stat-label">MEMOTE total score</div></div>
+      <div class="memote-bars">${bars}</div>
+    </div>
+    <div class="chip-row" style="margin-bottom:12px;">
+      <span class="badge good">${r.counts.ok} checks passed</span>
+      <span class="badge bad">${r.counts.issue} need attention</span>
+      <span class="badge info">${r.counts.info || 0} informational</span>
+      <span class="badge skip">${r.counts.skipped} skipped</span>
+      <span class="stoich">MEMOTE ${escapeHtml(m.memote_version || "")} · ${escapeHtml(m.duration_seconds)} s</span>
+    </div>
+    <h4 style="margin:14px 0 8px;">Needs attention <span class="stoich">(scored checks, largest impact on the score first)</span></h4>
+    ${shown.length ? shown.map(memoteIssueHtml).join("") : '<div class="note" style="background:#ecfdf5;border-color:#a7f3d0;color:#047857;">No scored checks flagged an issue.</div>'}
+    ${issues.length > 8 ? `<button type="button" class="secondary" data-memote-toggle="1">${MEMOTE_SHOW_ALL ? "Show fewer" : `Show all ${issues.length}`}</button>` : ""}
+    <h4 style="margin:18px 0 8px;">All checks by category</h4>
+    ${allCards}
+    <div class="memote-actions" style="margin-top:14px;">
+      <a href="/api/memote/${MODEL_ID}/report" target="_blank" rel="noopener"><button type="button">Open full MEMOTE report</button></a>
+      <a href="/api/memote/${MODEL_ID}/report?download=1"><button type="button" class="secondary">Download report (HTML)</button></a>
+      <button type="button" class="secondary" data-memote-rerun="1">Run again</button>
+    </div>
+    <p class="stoich" style="margin-top:8px;">MEMOTE was run on the model exactly as uploaded (before any diet was applied).</p>`;
+}
+
+function renderMemoteBox() {
+  const box = $("memoteBox");
+  if (!box) return;
+  const st = MEMOTE_STATE;
+  let body;
+  // DATA.memote_message is only a hint from when the model was loaded; the
+  // Run button always works (the server re-checks), so installing MEMOTE
+  // doesn't require re-uploading the model.
+  const hint = (DATA && DATA.memote_available === false && DATA.memote_message && !(st && st.status !== "error"))
+    ? `<div class="note" style="margin-bottom:10px;">${escapeHtml(DATA.memote_message)}</div>` : "";
+  if (st && (st.status === "running" || st.status === "queued")) {
+    body = `
+      <div class="memote-wait">
+        <div class="progress-track"><div class="progress-fill" style="width:${st.percent || 3}%"></div></div>
+        <div class="memote-wait-msg"><strong>${st.percent || 0}%</strong> · ${escapeHtml(memoteStageText(st))} · ${st.elapsed}s elapsed</div>
+        <div class="memote-wait-msg">This can take a few minutes for large models. You don't need to wait here — feel free to explore the other tabs and come back later; the run continues in the background and the status shows at the top.</div>
+      </div>
+      <div class="memote-actions" style="margin-top:12px;"><button type="button" class="secondary" data-memote-cancel="1">Cancel</button></div>`;
+  } else if (st && st.status === "done" && st.result) {
+    body = memoteResultHtml(st.result);
+  } else {
+    const msg = st && st.status === "error" ? `<div class="error" style="margin-bottom:10px;white-space:pre-wrap;">${escapeHtml(st.error || "MEMOTE failed.")}</div>`
+      : st && st.status === "cancelled" ? `<div class="note">The run was cancelled.</div>` : "";
+    body = `${hint}${msg}<div class="memote-actions"><button type="button" data-memote-run="1">Run MEMOTE</button>
+      <span class="stoich">Takes from under a minute to several minutes depending on model size.</span></div>`;
+  }
+  box.innerHTML = `
+    <div class="memote-card">
+      <div class="memote-head">
+        <h3>Model quality check — MEMOTE</h3>
+        <a class="info-link" href="${MEMOTE_PAPER_URL}" target="_blank" rel="noopener" title="About MEMOTE: Lieven et al., Nature Biotechnology 2020 (opens the paper)">i</a>
+        <a class="stoich" href="${MEMOTE_DOCS_URL}" target="_blank" rel="noopener">documentation</a>
+      </div>
+      <p class="memote-desc">MEMOTE is the community standard test suite for genome-scale models: it checks stoichiometric consistency, mass and charge balance, annotation quality, biomass, network topology and more, and gives an overall score. It is not run automatically because it takes time — run it when you want a full quality audit.</p>
+      ${body}
+    </div>`;
+  box.querySelector("[data-memote-run]")?.addEventListener("click", startMemote);
+  box.querySelector("[data-memote-rerun]")?.addEventListener("click", startMemote);
+  box.querySelector("[data-memote-cancel]")?.addEventListener("click", cancelMemote);
+  box.querySelector("[data-memote-toggle]")?.addEventListener("click", () => { MEMOTE_SHOW_ALL = !MEMOTE_SHOW_ALL; renderMemoteBox(); });
+  box.querySelectorAll("[data-goto]").forEach(b => b.addEventListener("click", ev => {
+    ev.preventDefault(); ev.stopPropagation(); goToTab(b.dataset.goto);
+  }));
+  updateMemotePill();
+}
+
+function updateMemotePill() {
+  const pill = $("memotePill");
+  if (!pill) return;
+  const st = MEMOTE_STATE;
+  pill.className = "memote-pill hidden";
+  if (!st || st.status === "none" || st.status === "cancelled") return;
+  if (st.status === "running" || st.status === "queued") {
+    pill.className = "memote-pill running";
+    pill.textContent = `MEMOTE running… ${st.percent || 0}%`;
+  } else if (st.status === "done" && st.result) {
+    pill.className = "memote-pill done";
+    pill.textContent = `MEMOTE score ${memotePct(st.result.total_score)}`;
+  } else if (st.status === "error") {
+    pill.className = "memote-pill error";
+    pill.textContent = "MEMOTE failed";
+  }
+}
+
+async function startMemote() {
+  if (!MODEL_ID) return;
+  MEMOTE_SHOW_ALL = false;
+  try {
+    const resp = await fetch(`/api/memote/${MODEL_ID}/start`, { method: "POST" });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Could not start MEMOTE");
+    MEMOTE_STATE = data;
+  } catch (err) {
+    MEMOTE_STATE = { status: "error", error: err.message };
+  }
+  renderMemoteBox();
+  pollMemote();
+}
+
+function pollMemote() {
+  if (MEMOTE_TIMER) clearInterval(MEMOTE_TIMER);
+  const forModel = MODEL_ID;
+  MEMOTE_TIMER = setInterval(async () => {
+    if (forModel !== MODEL_ID) { clearInterval(MEMOTE_TIMER); MEMOTE_TIMER = null; return; }
+    try {
+      const resp = await fetch(`/api/memote/${forModel}/status`);
+      MEMOTE_STATE = await resp.json();
+    } catch (err) { return; } // transient network problem: try again next tick
+    if (!(MEMOTE_STATE.status === "running" || MEMOTE_STATE.status === "queued")) {
+      clearInterval(MEMOTE_TIMER); MEMOTE_TIMER = null;
+    }
+    renderMemoteBox();
+  }, 1500);
+}
+
+async function cancelMemote() {
+  if (!MODEL_ID) return;
+  await fetch(`/api/memote/${MODEL_ID}/cancel`, { method: "POST" }).catch(() => {});
+  if (MEMOTE_TIMER) { clearInterval(MEMOTE_TIMER); MEMOTE_TIMER = null; }
+  MEMOTE_STATE = { status: "cancelled" };
+  renderMemoteBox();
+}
+
+$("memotePill").addEventListener("click", () => {
+  goToTab("overview");
+  $("memoteBox")?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+// ---------------------------------------------------------------------------
+// References
+// ---------------------------------------------------------------------------
+const REFERENCES = [
+  { name: "MEMOTE", why: "Model quality test suite run from the Overview page.",
+    cite: "Lieven C. et al. MEMOTE for standardized genome-scale metabolic model testing. Nature Biotechnology 38, 272–276 (2020).",
+    links: [["Paper", "https://doi.org/10.1038/s41587-020-0446-y"], ["Documentation", "https://memote.readthedocs.io/"], ["Source code", "https://github.com/opencobra/memote"]] },
+  { name: "COBRApy", why: "Model loading, constraint-based analysis (FBA, FVA, knockouts) and solver interface.",
+    cite: "Ebrahim A. et al. COBRApy: COnstraints-Based Reconstruction and Analysis for Python. BMC Systems Biology 7, 74 (2013).",
+    links: [["Paper", "https://doi.org/10.1186/1752-0509-7-74"], ["Documentation", "https://cobrapy.readthedocs.io/"]] },
+  { name: "Thiele & Palsson protocol", why: "The reconstruction and quality-control workflow that informs the checks in this tool.",
+    cite: "Thiele I. & Palsson B.Ø. A protocol for generating a high-quality genome-scale metabolic reconstruction. Nature Protocols 5, 93–121 (2010).",
+    links: [["Paper", "https://doi.org/10.1038/nprot.2009.203"]] },
+  { name: "FROG reports / COMBINE", why: "Reproducible model-analysis reports (FBA, FVA, gene and reaction deletions).",
+    cite: "FROG (FBA, Reaction deletion, Objective function and Gene deletion) reports are a COMBINE community specification for reproducible constraint-based model analysis; see the specification repository for the current reference.",
+    links: [["Specification", "https://github.com/matthiaskoenig/fbc_curation"], ["COMBINE", "https://co.mbine.org/"]] },
+  { name: "MetaNetX", why: "Cross-reference tables used for ID namespace detection and translation.",
+    cite: "Moretti S. et al. MetaNetX/MNXref: unified namespace for metabolites and biochemical reactions in the context of metabolic models. Nucleic Acids Research 49, D570–D574 (2021).",
+    links: [["Paper", "https://doi.org/10.1093/nar/gkaa992"], ["Website", "https://www.metanetx.org/"]] },
+  { name: "libSBML", why: "Reading and validating SBML model files.",
+    cite: "Bornstein B.J. et al. LibSBML: an API library for SBML. Bioinformatics 24, 880–881 (2008).",
+    links: [["Paper", "https://doi.org/10.1093/bioinformatics/btn051"], ["Documentation", "https://sbml.org/software/libsbml/"]] },
+  { name: "Cytoscape.js", why: "Network visualisation in the Pathway Tracer.",
+    cite: "Franz M. et al. Cytoscape.js 2023 update: a graph theory library for visualization and analysis. Bioinformatics 39, btad031 (2023).",
+    links: [["Paper", "https://doi.org/10.1093/bioinformatics/btad031"], ["Documentation", "https://js.cytoscape.org/"]] },
+  { name: "GLPK", why: "Linear-programming solver used by default.",
+    cite: "GNU Linear Programming Kit.",
+    links: [["Documentation", "https://www.gnu.org/software/glpk/"]] },
+];
+
+function renderReferences() {
+  $("references").innerHTML = `
+    <h2>References</h2>
+    <p class="memote-desc">Tools, standards and data resources this inspector builds on. Please cite them when you use results from this tool.</p>
+    <div class="ref-list">${REFERENCES.map(r => `
+      <div class="ref-item">
+        <h4>${escapeHtml(r.name)}</h4>
+        <p>${escapeHtml(r.why)}</p>
+        <p>${escapeHtml(r.cite)}</p>
+        <div>${r.links.map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${escapeHtml(t)} ↗</a>`).join("")}</div>
+      </div>`).join("")}</div>`;
+}
+
+
+// ---------------------------------------------------------------------------
+// Diagnostics: Reaction Balance
+// ---------------------------------------------------------------------------
+let BALANCE_RESULT = null;
+let BALANCE_FOCUS = null;       // reaction id to open/scroll to
+let BALANCE_FILTER = "";        // "", "unbalanced", "unknown"
+
+function renderBalance() {
+  $("balance").innerHTML = `
+    <h2>Reaction balance</h2>
+    <div class="note">
+      A reaction is <strong>balanced</strong> when every element (and the net charge) adds up to the same on both sides.
+      This tab lists reactions that are <strong>unbalanced</strong> (and by how much of which element) and those that
+      <strong>can't be checked</strong> because a metabolite has no chemical formula. Exchange/demand/sink and biomass
+      reactions are skipped. Nothing is changed in the model.
+    </div>
+    <div class="toolbar">
+      <button id="balRunBtn" type="button">Check reaction balance</button>
+      <select id="balFilter">
+        <option value="">Show: all problems</option>
+        <option value="unbalanced">Show: unbalanced only</option>
+        <option value="unknown">Show: can't check (no formula)</option>
+      </select>
+      <input id="balSearch" type="text" placeholder="Search reaction or metabolite ID…">
+      <span id="balCount"></span>
+    </div>
+    <div id="balStatus" class="debug-status"></div>
+    <div id="balResults"></div>
+  `;
+  $("balRunBtn").addEventListener("click", () => runBalance());
+  $("balFilter").addEventListener("input", () => { BALANCE_FILTER = $("balFilter").value; drawBalance(); });
+  $("balSearch").addEventListener("input", drawBalance);
+  if (BALANCE_RESULT) drawBalance();
+}
+
+async function runBalance() {
+  if (!MODEL_ID) { $("balStatus").innerHTML = `<span class="error">Model session expired — please re-run the initial analysis.</span>`; return; }
+  $("balStatus").textContent = "Checking every reaction…";
+  $("balRunBtn").disabled = true;
+  try {
+    const res = await fetch("/api/balance-diagnostics", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model_id: MODEL_ID }) });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || "Balance check failed");
+    BALANCE_RESULT = data;
+    $("balStatus").textContent = "";
+    drawBalance();
+  } catch (err) {
+    $("balStatus").innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
+  } finally {
+    $("balRunBtn").disabled = false;
+  }
+}
+
+function openBalanceDiagnostics(rxnId, filter) {
+  BALANCE_FOCUS = rxnId || null;
+  if (rxnId) {
+    const r = DATA.reactions.find(x => x.id === rxnId);
+    BALANCE_FILTER = r && r.balance === "unknown" ? "unknown" : "unbalanced";
+  } else {
+    BALANCE_FILTER = filter || "";
+  }
+  goToTab("balance");
+  if ($("balFilter")) $("balFilter").value = BALANCE_FILTER;
+  if (BALANCE_RESULT) drawBalance(); else runBalance();
+}
+
+function drawBalance() {
+  const data = BALANCE_RESULT;
+  if (!data) return;
+  const c = data.counts;
+  const q = ($("balSearch").value || "").toLowerCase();
+  let rows = data.reactions.filter(r =>
+    (!BALANCE_FILTER || r.status === BALANCE_FILTER) &&
+    (!q || `${r.id} ${r.name} ${r.metabolites.map(m => m.id).join(" ")}`.toLowerCase().includes(q)));
+  $("balFilter").value = BALANCE_FILTER;
+  $("balCount").textContent = `${rows.length} shown`;
+  // Put the reaction the user clicked first.
+  if (BALANCE_FOCUS) rows = [...rows.filter(r => r.id === BALANCE_FOCUS), ...rows.filter(r => r.id !== BALANCE_FOCUS)];
+  const LIMIT = 300;
+  const shown = rows.slice(0, LIMIT);
+  const cards = [["Balanced", c.balanced, "good"], ["Unbalanced", c.unbalanced, "bad"], ["Can't check", c.unknown, "warn"], ["Not applicable", c["n/a"], ""]];
+  $("balResults").innerHTML = `
+    <div class="chip-row" style="margin-bottom:12px;">${cards.map(([l, v, cl]) => `<span class="badge ${cl}">${l}: ${v}</span>`).join(" ")}
+      <span class="stoich">of ${data.total} reactions</span></div>
+    ${shown.length ? shown.map(r => `
+      <details class="memote-issue"${r.id === BALANCE_FOCUS ? " open" : ""} id="bal-${escapeHtml(r.id)}">
+        <summary>
+          <span class="badge ${r.status === "unbalanced" ? "bad" : "warn"}">${r.status === "unbalanced" ? "unbalanced" : "can't check"}</span>
+          <strong>${escapeHtml(r.id)}</strong>
+          <span class="stoich">${escapeHtml(r.name)}</span>
+          ${r.status === "unbalanced" ? `<span class="stoich">${Object.entries(r.imbalance).map(([k, v]) => `${escapeHtml(k)} ${v > 0 ? "+" : ""}${fmt(v, 3)}`).join(", ")}</span>` : ""}
+        </summary>
+        <div class="memote-issue-body">
+          <div><strong>What's wrong:</strong> ${escapeHtml(r.problem)}</div>
+          <code>${escapeHtml(r.reaction)}</code>
+          <table style="margin-top:8px;"><thead><tr><th>Metabolite</th><th>Name</th><th>Coefficient</th><th>Formula</th><th>Charge</th></tr></thead><tbody>
+            ${r.metabolites.map(m => `<tr><td>${escapeHtml(m.id)}</td><td>${escapeHtml(m.name)}</td><td>${fmt(m.coefficient, 4)}</td>
+              <td${m.formula ? "" : ' style="color:#b91c1c;font-weight:700;"'}>${escapeHtml(m.formula || "missing")}</td>
+              <td${m.charge == null ? ' style="color:#b45309;"' : ""}>${m.charge == null ? "missing" : escapeHtml(m.charge)}</td></tr>`).join("")}
+          </tbody></table>
+        </div>
+      </details>`).join("") : `<div class="note" style="background:#ecfdf5;border-color:#a7f3d0;color:#047857;">Nothing to show for this filter.</div>`}
+    ${rows.length > LIMIT ? `<div class="note">Showing the first ${LIMIT} of ${rows.length}. Use the filter or search to narrow down.</div>` : ""}`;
+  if (BALANCE_FOCUS) {
+    const el = document.getElementById("bal-" + BALANCE_FOCUS);
+    if (el) el.scrollIntoView({ block: "nearest" });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostics: Biomass precursor producibility
+// ---------------------------------------------------------------------------
+let PRECURSOR_RESULT = null;
+
+function renderPrecursors() {
+  $("precursors").innerHTML = `
+    <h2>Biomass precursor check</h2>
+    <div class="note">
+      For each biomass reaction, every precursor (each metabolite the biomass reaction consumes) is tested on its own:
+      can the model produce it at all? Each is tested <strong>under the current diet/medium</strong> and again
+      <strong>with every exchange opened</strong>. A precursor that fails only on the current diet points to a missing
+      nutrient; one that fails even with everything open points to a gap in the network. Cofactors such as ATP or NADPH
+      that only work when their partner (ADP, NADP+) is returned are marked <em>cofactor</em>. The model is not changed.
+    </div>
+    <div class="toolbar"><button id="precRunBtn" type="button">Run precursor check</button><span id="precCount"></span></div>
+    <div id="precStatus" class="debug-status"></div>
+    ${progressBarHtml("precProgress")}
+    <div id="precResults"></div>
+  `;
+  $("precRunBtn").addEventListener("click", runPrecursors);
+  if (PRECURSOR_RESULT) drawPrecursors();
+}
+
+async function runPrecursors() {
+  if (!MODEL_ID) { $("precStatus").innerHTML = `<span class="error">Model session expired — please re-run the initial analysis.</span>`; return; }
+  $("precRunBtn").disabled = true;
+  $("precStatus").textContent = "Testing each biomass precursor (two solves per precursor)…";
+  progressStart("precProgress", true);
+  try {
+    const res = await fetch("/api/biomass-precursors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model_id: MODEL_ID }) });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || "Precursor check failed");
+    PRECURSOR_RESULT = data;
+    $("precStatus").textContent = "";
+    drawPrecursors();
+  } catch (err) {
+    $("precStatus").innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
+  } finally {
+    progressDone("precProgress");
+    $("precRunBtn").disabled = false;
+  }
+}
+
+function drawPrecursors() {
+  const verdictBadge = v => v === "ok" ? '<span class="badge good">producible</span>'
+    : v === "diet" ? '<span class="badge warn">needs a nutrient</span>'
+    : v === "recycled" ? '<span class="badge info" title="Producible when its paired form is returned">cofactor</span>'
+    : '<span class="badge bad">not producible</span>';
+  const order = { gap: 0, diet: 1, recycled: 2, ok: 3 };
+  $("precResults").innerHTML = PRECURSOR_RESULT.biomass_reactions.map(b => {
+    const c = b.counts;
+    const rows = [...b.precursors].sort((x, y) => order[x.verdict] - order[y.verdict] || x.id.localeCompare(y.id));
+    return `
+      <h3>${escapeHtml(b.id)} <span class="stoich">${escapeHtml(b.name)}</span></h3>
+      <div class="chip-row" style="margin-bottom:10px;">
+        <span class="badge good">producible: ${c.ok}</span>
+        <span class="badge warn">needs a nutrient: ${c.diet}</span>
+        <span class="badge info">cofactor: ${c.recycled}</span>
+        <span class="badge bad">not producible: ${c.gap}</span>
+        <span class="stoich">of ${b.precursors.length} precursors</span>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Precursor</th><th>Name</th><th>Compartment</th><th>Biomass coeff.</th><th>Max flux (current diet)</th><th>Max flux (exchanges open)</th><th># Producing reactions</th><th>Result</th><th>What's missing</th></tr></thead>
+        <tbody>${rows.map(p => `<tr>
+          <td><strong>${escapeHtml(p.id)}</strong></td><td class="wrap">${escapeHtml(p.name)}</td>
+          <td>${compartmentBadges([p.compartment])}</td><td class="num">${fmt(Math.abs(p.coefficient), 4)}</td>
+          <td class="num">${fmt(p.current.max_flux, 4)}</td><td class="num">${fmt(p.open.max_flux, 4)}</td>
+          <td class="num">${p.producers}</td><td>${verdictBadge(p.verdict)}</td>
+          <td class="wrap" style="white-space:normal;min-width:480px;">${escapeHtml(p.hint || "—")}</td></tr>`).join("")}</tbody>
+      </table></div>`;
+  }).join("");
 }

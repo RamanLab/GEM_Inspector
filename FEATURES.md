@@ -55,3 +55,9 @@ All three results can be exported to CSV.
 - **Search, filter, and sort** — every table in the tool can be searched, filtered, and sorted by clicking a column header.
 - **CSV export** — the Minimal Medium and Network Gaps & Audits tables can each be exported as a spreadsheet file for use elsewhere.
 - **Nothing is changed permanently** — every "what if" test (removing a nutrient, blocking a reaction, trying a different diet) is temporary and only affects that one calculation; the model you uploaded is never permanently altered.
+
+## Added: Overview batch
+- Module navigation (4 modules + References) with sub-tabs; Overview is the default page.
+- On-request MEMOTE run: background process, progress bar, cancel, auto-retry with `glpk_exact`, score and section scores, "needs attention" list linking to the relevant tab, full MEMOTE HTML report (open/download).
+- References tab: MEMOTE, COBRApy, Thiele & Palsson 2010, FROG/COMBINE, MetaNetX, libSBML, Cytoscape.js, GLPK.
+- ID namespace / annotation cards moved to Annotation & Translation > ID namespaces & annotation.

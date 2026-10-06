@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Genome-scale Model Inspector</title>
-  <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/app.css?v={{ v }}">
 </head>
 <body>
 <header class="topbar">
@@ -48,20 +48,38 @@
     <div class="summary" id="summary"></div>
 
     <div class="app-toolbar">
+      <button id="memotePill" type="button" class="memote-pill hidden" title="Go to the MEMOTE run on the Overview page"></button>
       <button id="reportBtn" type="button">📄 Generate report…</button>
     </div>
 
-    <nav class="tabs">
-      <button class="tab active" data-tab="overview">Overview</button>
+    <nav class="modnav" aria-label="Modules">
+      <button class="modbtn active" data-module="overview">Overview</button>
+      <button class="modbtn" data-module="diagnostics">Diagnostics &amp; Comparative Analyses</button>
+      <button class="modbtn" data-module="debugging">Debugging Toolkit</button>
+      <button class="modbtn" data-module="annotation">Annotation &amp; Translation</button>
+      <button class="modbtn modbtn-right" data-module="references">References</button>
+    </nav>
+
+    <nav class="subnav" data-module="overview">
+      <button class="tab active" data-tab="overview">Summary</button>
       <button class="tab" data-tab="metabolites">Metabolites</button>
       <button class="tab" data-tab="reactions">Reactions</button>
       <button class="tab" data-tab="objective">Objective</button>
+    </nav>
+    <nav class="subnav hidden" data-module="diagnostics">
       <button class="tab" data-tab="minmed">Minimal Medium</button>
       <button class="tab" data-tab="exchanges">Exchange essentiality</button>
-      <button class="tab" data-tab="debug" id="debugTab" style="display:none;">Exchange Debugging</button>
-      <button class="tab" data-tab="tracer">Pathway Tracer</button>
       <button class="tab" data-tab="gaps">Network Gaps &amp; Audits</button>
+      <button class="tab" data-tab="balance">Reaction Balance</button>
+      <button class="tab" data-tab="precursors">Biomass Precursors</button>
       <button class="tab" data-tab="frog">FROG Report</button>
+    </nav>
+    <nav class="subnav hidden" data-module="debugging">
+      <button class="tab" data-tab="debug" id="debugTab">Exchange Debugging</button>
+      <button class="tab" data-tab="tracer">Pathway Tracer</button>
+    </nav>
+    <nav class="subnav hidden" data-module="annotation">
+      <button class="tab" data-tab="annotation">ID namespaces &amp; annotation</button>
     </nav>
 
     <section id="overview" class="panel active"></section>
@@ -74,12 +92,16 @@
     <section id="tracer" class="panel"></section>
     <section id="gaps" class="panel"></section>
     <section id="frog" class="panel"></section>
+    <section id="balance" class="panel"></section>
+    <section id="precursors" class="panel"></section>
+    <section id="annotation" class="panel"></section>
+    <section id="references" class="panel"></section>
   </section>
 </main>
 
 <div id="reportModalRoot"></div>
 
 <script src="/static/vendor/cytoscape.min.js"></script>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v={{ v }}"></script>
 </body>
 </html>
