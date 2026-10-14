@@ -18,8 +18,9 @@ from annotation.namespace_mapping import (
     detect_metabolite_namespace_and_map,
     detect_reaction_namespace_and_map,
 )
-from core.shared import classify_reactions, clean, safe_float, subsystem_value
-from diagnostics.balance import analyse_reaction, objective_reaction_ids, short_text as balance_short_text
+from core.memo import recall, store_value
+from core.shared import classify_reactions, clean, safe_float, subsystem_value, wt_solution as solve_wt
+from diagnostics.balance import analyse_all_reactions, short_text as balance_short_text
 
 ESSENTIALITY_RULE = "Exchange reaction is essential when reaction KO gives growth < 5% of WT growth."
 TRANSPORT_RULE = (
@@ -76,9 +77,42 @@ def stoich_rows(reaction):
     return rows
 
 
+def gene_rows(model, fluxes):
+    """One row per gene: its reactions and basic attributes.
+
+    `lost_on_ko` counts the reactions that cannot be catalysed any more when
+    this gene alone is deleted (its GPR rule evaluates to False without it).
+    """
+    rows = []
+    for gene in model.genes:
+        rxns = sorted(gene.reactions, key=lambda r: r.id)
+        lost = [r.id for r in rxns if not r.gpr.eval(knockouts={gene.id})]
+        active = 0
+        for r in rxns:
+            flux = safe_float(fluxes.get(r.id)) if hasattr(fluxes, "get") else None
+            if flux is not None and abs(flux) > 1e-9:
+                active += 1
+        annotation = []
+        for key, value in sorted((gene.annotation or {}).items()):
+            for v in (value if isinstance(value, (list, tuple)) else [value]):
+                annotation.append(f"{key}:{v}")
+        rows.append({
+            "id": gene.id,
+            "name": gene.name or "",
+            "functional": bool(gene.functional),
+            "reaction_count": len(rxns),
+            "reactions": [r.id for r in rxns],
+            "lost_on_ko": lost,
+            "active_count": active,
+            "subsystems": sorted({subsystem_value(r) for r in rxns if subsystem_value(r)}),
+            "annotation": annotation,
+        })
+    return rows
+
+
 def quick_analyze(model):
     """Fast initial analysis without KO tests."""
-    wt_solution = model.optimize()
+    wt_solution = solve_wt(model)
     wt_status = str(wt_solution.status)
     wt_growth = safe_float(wt_solution.objective_value)
 
@@ -219,10 +253,10 @@ def quick_analyze(model):
     fluxes = wt_solution.fluxes if hasattr(wt_solution, "fluxes") else {}
     reaction_types = classify_reactions(model)
     reactions = []
-    objective_ids = objective_reaction_ids(model)
+    balance_by_id = analyse_all_reactions(model)
     for rxn in model.reactions:
         flux = safe_float(fluxes.get(rxn.id)) if hasattr(fluxes, "get") else None
-        balance = analyse_reaction(rxn, objective_ids)
+        balance = balance_by_id[rxn.id]
         reactions.append({
             "balance": balance["status"],
             "balance_detail": balance_short_text(balance),
@@ -260,6 +294,7 @@ def quick_analyze(model):
         "stats": stats,
         "reactions": reactions,
         "metabolites": metabolites,
+        "genes": gene_rows(model, fluxes),
         "objective": objective_components,
         "objective_metabolites": objective_metabolites,
         "namespace_audit": namespace_audit,
@@ -316,6 +351,9 @@ def stream_ko_analysis(model, wt_growth, fluxes):
         if ko_growth is not None and wt_growth > 0:
             ratio = ko_growth / wt_growth
             essential = ratio < 0.05
+        if wt_growth > 0:
+            # Shared with the model report so it does not repeat these knockouts.
+            store_value(model, ("exchange_ko_retained", rxn.id), ratio)
 
         met_ids = [m.id for m in rxn.metabolites]
         met_names = [clean_metabolite_display_name(m) for m in rxn.metabolites]

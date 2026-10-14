@@ -53,6 +53,7 @@ The debugging module is a major focus of the tool. It is designed to help move b
 * Currency/cofactor-aware pathway tracing
 * Interactive network views
 * Debugging and comparison reports
+* Compare two models: naming conventions, then genes, metabolites, reactions and biomass components shared or unique to each, with copy / CSV export of ids and MetaNetX ids
 
 ### 4. Annotation & Translation Toolkit
 
@@ -62,6 +63,7 @@ Tools for working with model annotations and translating information across iden
 * Identifier and namespace inspection
 * Annotation translation across namespaces
 * Model annotation quality checks
+* SEED to VMH translation using the tables in `data/` (mapped / errors / no available mapping, each exportable), with the translated model and report downloadable as a zip
 
 ## Supported Model Formats
 
@@ -167,7 +169,7 @@ For the required Python environment and dependencies, see [`requirements.txt`](r
 
 ## Acknowledgements
 
-GEM Inspector is built using tools and libraries from the GEM/constraint-based modelling ecosystem, including **COBRApy**, **MEMOTE**, and **Cytoscape.js**.
+GEM Inspector is built using tools and libraries from the GEM/constraint-based modelling ecosystem, including **COBRApy**, **MEMOTE**, and **Cytoscape.js**, and was developed with the assistance of Claude (Anthropic).
 
 For more information on the implementation and individual analyses, see the documentation and source code in this repository.
 
@@ -186,3 +188,19 @@ For more information on the implementation and individual analyses, see the docu
 
 
 
+
+## Compare Models reports
+
+After a comparison, the Compare Models tab offers the result as an Excel workbook and as a self-contained HTML page. Paired reactions are also checked for different flux bounds and stoichiometric coefficients, and reactions with different ids are paired when their equations match.
+
+## Translate via MetaNetX tab
+
+Translates the loaded model's metabolite and reaction ids to MetaNetX, BiGG, VMH, ModelSEED, KEGG or MetaCyc ids by going through MetaNetX (id, then MetaNetX id, then target id). Results are reported as mapped, errors and no available mapping, each copyable or downloadable, and the translated model can be downloaded with the report.
+
+## Balance Audit tab
+
+For each unbalanced reaction: the metabolites' MetaNetX id and their ids in BiGG, VMH, ModelSEED, KEGG and MetaCyc, a formula and charge check, and a suggested fix that is verified by recomputing the balance. Copy, CSV and Excel downloads. To compare formulas with the MetaNetX reference, put MetaNetX's `chem_prop.tsv` (or `.tsv.gz`) in the data folder; without it the audit still runs on the model's own formulas.
+
+## Model report and multi-model comparison
+
+Overview > Model report builds a quality report for the loaded model (Excel and HTML). The landing page has "Analyze multiple models": upload several models to get a side-by-side statistics table, automatic findings, and the comparison as an Excel workbook and an HTML report with charts.

@@ -30,6 +30,21 @@ def _write():
         pass
 
 
+def pytest_collection_modifyitems(items, config):
+    """Drop tests named in MEMOTE_SKIP (set by the job manager after a test stalls)."""
+    skip = {n for n in os.environ.get("MEMOTE_SKIP", "").split(",") if n}
+    if not skip:
+        return
+    kept = [i for i in items if i.name.split("[")[0] not in skip]
+    items[:] = kept
+
+
+def pytest_runtest_logstart(nodeid, location):
+    # Lets the job manager tell which test is running if one never returns.
+    _state["running"] = nodeid.split("::")[-1].split("[")[0]
+    _write()
+
+
 def pytest_collection_finish(session):
     _state["total"] = len(session.items)
     _write()

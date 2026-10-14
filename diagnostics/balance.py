@@ -10,6 +10,8 @@ Status values:
 """
 from cobra.util import linear_reaction_coefficients
 
+from core.memo import remember
+
 TOL = 1e-6
 
 
@@ -91,12 +93,24 @@ def problem_sentence(info):
     return text + " " + " ".join(hints)
 
 
+def analyse_all_reactions(model):
+    """{reaction id: analyse_reaction result} for the whole model, computed once."""
+    def compute():
+        objective_ids = objective_reaction_ids(model)
+        return {rxn.id: analyse_reaction(rxn, objective_ids) for rxn in model.reactions}
+    return remember(model, "balance_by_reaction", compute)
+
+
 def compute_balance_report(model):
-    objective_ids = objective_reaction_ids(model)
+    return remember(model, "balance_report", lambda: _compute_balance_report(model))
+
+
+def _compute_balance_report(model):
+    analysed = analyse_all_reactions(model)
     counts = {"balanced": 0, "unbalanced": 0, "unknown": 0, "n/a": 0}
     problems = []
     for rxn in model.reactions:
-        info = analyse_reaction(rxn, objective_ids)
+        info = analysed[rxn.id]
         counts[info["status"]] += 1
         if info["status"] in ("unbalanced", "unknown"):
             problems.append({

@@ -191,6 +191,7 @@ def debug_exchange_to_biomass(
     exclude_trivial_metabolites=True,
     reaction_types=None,
     compartment_names=None,
+    solution=None,
 ):
     """Trace active-flux pathways from an exchange-derived metabolite toward
     the biomass reaction. Only reactions carrying non-zero flux in the
@@ -207,12 +208,16 @@ def debug_exchange_to_biomass(
     straight through to format_flux_path (see there) -- a caller tracing
     several exchanges in one request computes these once up front rather
     than recomputing them for every exchange's before/after-KO trace.
+
+    `solution` is an already-solved FBA solution for the model as it stands
+    (the "before KO" trace passes the one solved once for the whole request).
     """
     model.reactions.get_by_id(exchange_rxn_id)  # validate it exists before running FBA
     biomass = model.reactions.get_by_id(biomass_rxn_id)
     start_met = model.metabolites.get_by_id(internal_metabolite_id)
 
-    solution = model.optimize()
+    if solution is None:
+        solution = model.optimize()
     if solution.status != "optimal":
         return {"status": solution.status, "paths": [], "error": "FBA not optimal"}
 

@@ -4,3 +4,4 @@ python-libsbml>=5.20
 gunicorn
 memote>=0.17,<0.18
 scipy
+openpyxl

@@ -4,8 +4,10 @@ these ever permanently change the cached model.
 """
 from flask import Blueprint, Response, jsonify, request
 
-from core.shared import MODEL_CACHE, touch_model_cache
+from core.shared import EXPIRY_HOOKS, MODEL_CACHE, touch_model_cache
 from diagnostics.balance import compute_balance_report
+from diagnostics.balance_audit import audit_unbalanced_reactions
+from diagnostics.balance_audit_export import build_audit_xlsx
 from diagnostics.biomass_precursors import compute_biomass_precursor_report
 from diagnostics.demand_sink import compute_demand_sink_audit
 from diagnostics.frog import stream_frog_report
@@ -13,6 +15,10 @@ from diagnostics.minimal_medium import compute_minimal_medium_report
 from diagnostics.network_gaps import compute_network_gaps_report
 
 diagnostics_bp = Blueprint("diagnostics", __name__)
+
+# model_id -> the last balance audit, kept so its Excel file can be downloaded.
+BALANCE_AUDITS = {}
+EXPIRY_HOOKS.append(lambda model_id: BALANCE_AUDITS.pop(model_id, None))
 
 
 @diagnostics_bp.post("/api/minimal-medium")
@@ -175,3 +181,33 @@ def api_biomass_precursors():
     if "error" in report:
         return jsonify({"status": "error", **report}), 400
     return jsonify({"status": "success", **report})
+
+
+@diagnostics_bp.post("/api/balance-audit")
+def api_balance_audit():
+    """Why each unbalanced reaction doesn't balance, with verified fix
+    suggestions and the metabolites' MetaNetX / database mapping."""
+    data = request.json or {}
+    model_id = data.get("model_id")
+    if not model_id or model_id not in MODEL_CACHE:
+        return jsonify({"error": "Model not found or expired. Please re-run the initial analysis."}), 404
+    touch_model_cache(model_id)
+    model, _ = MODEL_CACHE[model_id]
+    try:
+        report = audit_unbalanced_reactions(model, include_unknown=bool(data.get("include_unknown", True)))
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    BALANCE_AUDITS[model_id] = report
+    return jsonify({"status": "success", **report})
+
+
+@diagnostics_bp.get("/api/balance-audit/<model_id>/report")
+def api_balance_audit_report(model_id):
+    """Excel workbook of the last balance audit of this model."""
+    report = BALANCE_AUDITS.get(model_id)
+    if report is None:
+        return jsonify({"error": "No balance audit found for this model. Run the audit first."}), 404
+    touch_model_cache(model_id)
+    return Response(build_audit_xlsx(report),
+                    mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": 'attachment; filename="unbalanced_reaction_audit.xlsx"'})

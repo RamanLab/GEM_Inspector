@@ -22,6 +22,7 @@ from cobra.flux_analysis import find_blocked_reactions
 
 from annotation.naming import clean_metabolite_display_name, compartment_display_name
 from annotation.namespace_mapping import detect_metabolite_namespace_and_map, detect_reaction_namespace_and_map
+from core.memo import not_error, remember
 from core.shared import classify_reactions, safe_float, subsystem_value
 from diagnostics.solver_utils import run_with_exact_solver
 
@@ -121,6 +122,12 @@ def find_dead_end_metabolites(model, exclude_transport=True):
 
 
 def compute_network_gaps_report(model, zero_cutoff=None):
+    """Memoized per model and cutoff; see _compute_network_gaps_report."""
+    return remember(model, ("network_gaps", zero_cutoff),
+                    lambda: _compute_network_gaps_report(model, zero_cutoff), cache_if=not_error)
+
+
+def _compute_network_gaps_report(model, zero_cutoff=None):
     reaction_types = classify_reactions(model)
     compartment_names = {cid: compartment_display_name(cid, name) for cid, name in model.compartments.items()}
     _, _, _, met_to_mnx = detect_metabolite_namespace_and_map(model)

@@ -23,14 +23,15 @@ import json
 
 from cobra.flux_analysis import flux_variability_analysis, single_gene_deletion, single_reaction_deletion
 
-from core.shared import find_biomass_reaction, safe_float
+from core.memo import remember
+from core.shared import find_biomass_reaction, safe_float, wt_solution as solve_wt
 from diagnostics.solver_utils import run_with_exact_solver
 
 
 def compute_frog_objective(model):
     """The 'O' in FROG: a single FBA optimum under the model's current
     bounds (whatever diet was applied at upload)."""
-    solution = model.optimize()
+    solution = solve_wt(model)
     return {
         "objective_reaction": find_biomass_reaction(model),
         "status": str(solution.status),
@@ -39,6 +40,11 @@ def compute_frog_objective(model):
 
 
 def compute_frog_fva(model, fraction_of_optimum=1.0):
+    """Memoized per model and fraction; see _compute_frog_fva."""
+    return remember(model, ("frog_fva", str(fraction_of_optimum)), lambda: _compute_frog_fva(model, fraction_of_optimum))
+
+
+def _compute_frog_fva(model, fraction_of_optimum=1.0):
     """The 'F' in FROG: flux variability analysis on every reaction in the
     model at the given fraction_of_optimum (1.0 = fixed at the model's own
     maximum growth; lower values allow more flux variability)."""
@@ -63,6 +69,10 @@ def compute_frog_fva(model, fraction_of_optimum=1.0):
 
 
 def compute_frog_reaction_deletions(model):
+    return remember(model, "frog_reaction_deletions", lambda: _compute_frog_reaction_deletions(model))
+
+
+def _compute_frog_reaction_deletions(model):
     """The 'R' in FROG: single-reaction-deletion objective value for every
     reaction in the model (not just exchanges -- unlike the Exchange
     Essentiality tab, this is every reaction, per the FROG standard)."""
@@ -79,6 +89,10 @@ def compute_frog_reaction_deletions(model):
 
 
 def compute_frog_gene_deletions(model):
+    return remember(model, "frog_gene_deletions", lambda: _compute_frog_gene_deletions(model))
+
+
+def _compute_frog_gene_deletions(model):
     """The 'G' in FROG: single-gene-deletion objective value for every gene
     in the model."""
     if not model.genes:

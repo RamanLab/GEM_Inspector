@@ -20,6 +20,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 JOBS = {}  # model_id -> job dict
 _LOCK = threading.Lock()
+STALL_SECONDS = 180  # a single test with no progress for this long is skipped
 
 
 def memote_available():
@@ -39,6 +40,28 @@ def memote_available():
         )
 
 
+def selftest():
+    """Try to import MEMOTE in a fresh child process (the same way the worker
+    does) and report exactly what happens. Used by the 'Test MEMOTE setup'
+    button in the Overview tab."""
+    code = (
+        "import sys; print('python', sys.version.split()[0], sys.executable)\n"
+        "import memote; print('memote', memote.__version__)\n"
+        "from memote.suite.api import test_model, snapshot_report; print('memote api ok')\n"
+        "import pytest; print('pytest', pytest.__version__)\n"
+    )
+    env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    try:
+        done = subprocess.run([sys.executable, "-c", code], cwd=str(PROJECT_ROOT), env=env,
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=180, stdin=subprocess.DEVNULL,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return {"ok": done.returncode == 0, "python": sys.executable,
+                "output": _tail((done.stdout or "") + (done.stderr or ""), 4000)}
+    except Exception as exc:
+        return {"ok": False, "python": sys.executable, "output": f"{type(exc).__name__}: {exc}"}
+
+
 def _read_json(path):
     import json
     try:
@@ -48,7 +71,7 @@ def _read_json(path):
         return None
 
 
-def _tail(text, n=1500):
+def _tail(text, n=4000):
     text = (text or "").strip()
     return text[-n:]
 
@@ -62,19 +85,37 @@ def _run_worker(job, solver_mode):
     env = dict(os.environ)
     env["MEMOTE_PROGRESS_FILE"] = progress
     env["PYTHONPATH"] = str(PROJECT_ROOT) + os.pathsep + env.get("PYTHONPATH", "")
+    # On Windows a child process writing to a file uses the legacy code page
+    # (cp1252) and crashes on any non-ASCII character in pytest/MEMOTE output.
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    env["MEMOTE_SKIP"] = ",".join(sorted(job.get("skipped_tests", ())))
     err_path = os.path.join(out_dir, "worker.log")
     with open(err_path, "w", encoding="utf-8") as err:
         proc = subprocess.Popen(
             [sys.executable, "-m", "overview.memote_worker", str(job["model_path"]), out_dir, solver_mode],
             cwd=str(PROJECT_ROOT), env=env, stdout=err, stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     job["proc"] = proc
+    last_change, last_data = time.time(), None
     while proc.poll() is None:
         data = _read_json(progress)
         if data:
             job["progress"] = data
+            if data != last_data:
+                last_data, last_change = data, time.time()
+        # Some MEMOTE tests (e.g. unconserved metabolites, a MILP) can run for
+        # hours on a genome-scale model. If one test makes no progress for
+        # STALL_SECONDS, stop the worker; the job is rerun without that test.
+        if time.time() - last_change > STALL_SECONDS and last_data and last_data.get("running"):
+            job["stalled_test"] = last_data["running"]
+            proc.terminate()
+            break
         touch_model_cache(job["model_id"])
         time.sleep(0.5)
+    proc.wait()
     data = _read_json(progress)
     if data:
         job["progress"] = data
@@ -89,6 +130,9 @@ def _job_thread(job):
     try:
         job["status"] = "running"
         code, log = _run_worker(job, "default")
+        while job.get("stalled_test") and not job.get("cancelled"):
+            job.setdefault("skipped_tests", set()).add(job.pop("stalled_test"))
+            code, log = _run_worker(job, "default")
         if job.get("cancelled"):
             job["status"] = "cancelled"
             return
@@ -96,6 +140,9 @@ def _job_thread(job):
             job["retried"] = True
             job["progress"] = {"stage": "retrying", "done": 0, "total": 0, "current": ""}
             code, log = _run_worker(job, "glpk_exact")
+            while job.get("stalled_test") and not job.get("cancelled"):
+                job.setdefault("skipped_tests", set()).add(job.pop("stalled_test"))
+                code, log = _run_worker(job, "glpk_exact")
             if job.get("cancelled"):
                 job["status"] = "cancelled"
                 return
@@ -106,6 +153,8 @@ def _job_thread(job):
         import json
         with open(os.path.join(job["dir"], "result.json"), encoding="utf-8") as fh:
             job["result"] = json.load(fh)
+        if job.get("skipped_tests"):
+            job["result"].setdefault("meta", {})["skipped_slow_tests"] = sorted(job["skipped_tests"])
         job["status"] = "done"
         job["finished"] = time.time()
     except Exception as exc:
@@ -160,6 +209,8 @@ def job_state(model_id):
         "done": done, "total": total,
         "percent": round(100.0 * done / total) if total else 0,
         "current": prog.get("current", ""),
+        "running": prog.get("running", ""),
+        "skipped": sorted(job.get("skipped_tests", ())),
         "elapsed": round(time.time() - job["started"]),
         "retried": job["retried"],
         "error": job["error"],

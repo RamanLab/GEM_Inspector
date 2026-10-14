@@ -9,13 +9,38 @@
 <body>
 <header class="topbar">
   <div>
-    <h1>Genome-scale Model Inspector</h1>
-    <p>Upload a COBRA model → inspect structure, objective, exchanges, and exchange essentiality.</p>
+    <h1><a href="#" id="homeLink">Genome-scale Model Inspector</a></h1>
+    <p>Inspect, debug, compare and annotate COBRA genome-scale metabolic models.</p>
   </div>
 </header>
 
 <main class="container">
-  <section class="upload-card">
+  <!-- Home: choose single / multiple, and see what the toolkit offers. -->
+  <section id="viewHome" class="view">
+    <div class="choice-grid">
+      <button type="button" class="choice-card" id="chooseSingle">
+        <span class="choice-icon">1</span>
+        <strong>Inspect a single model</strong>
+        <span>Upload one model and explore it in depth: overview, diagnostics, debugging and annotation tools.</span>
+      </button>
+      <button type="button" class="choice-card" id="chooseMulti">
+        <span class="choice-icon">N</span>
+        <strong>Analyze multiple models</strong>
+        <span>Upload several models and get a side-by-side comparison with quality findings, as Excel and HTML reports.</span>
+      </button>
+    </div>
+    <div class="legend">
+      <span class="legend-title">What is in the toolkit</span>
+      <span class="status-chip available">Available</span>
+      <span class="status-chip planned">Coming soon</span>
+    </div>
+    <div class="module-grid" id="moduleGrid"></div>
+  </section>
+
+  <!-- Single model: upload step. -->
+  <section id="viewSingle" class="view hidden">
+    <button type="button" class="back-link" data-go="home">&larr; Back</button>
+    <section class="upload-card upload-single">
     <label class="dropzone" id="dropzone">
       <input id="modelFile" type="file" accept=".xml,.sbml,.json,.yml,.yaml,.mat,.gz,.zip,.bz2">
       <strong>Drop a model here</strong>
@@ -36,15 +61,66 @@
         <span>or click to choose a CSV/TSV of (metabolite or exchange id, flux)</span>
       </label>
       <span id="dietFilename"></span>
+      <details class="diet-help" id="dietHelp">
+        <summary>What should a diet file look like?</summary>
+        <p>A plain-text table with <strong>two columns</strong>: the exchange reaction id (or the metabolite id) and a flux value.
+          CSV, TSV or semicolon-separated all work, and a header row is optional (it is detected and skipped).</p>
+        <ul>
+          <li>A <strong>positive</strong> number is the maximum uptake rate (mmol/gDW/h) for that nutrient.</li>
+          <li>Every exchange <strong>not listed</strong> is closed for uptake, so list everything the cells may consume.</li>
+          <li>Ids may be exchange reactions (<code>EX_glc__D_e</code>) or metabolites (<code>glc__D</code>, <code>glc__D[e]</code>).
+            Unmatched rows are reported after the analysis.</li>
+        </ul>
+        <pre>exchange,flux
+EX_glc__D_e,10
+EX_o2_e,20
+EX_nh4_e,1000
+EX_pi_e,1000
+EX_h2o_e,1000
+EX_h_e,1000</pre>
+        <button type="button" id="dietExampleBtn" class="secondary">Download this example (CSV)</button>
+      </details>
     </div>
 
     <button id="analyzeBtn" disabled>Analyze model</button>
     <span id="filename"></span>
     <span id="status"></span>
     <div class="progress-track" id="mainProgress" style="display:none;"><div class="progress-fill"></div></div>
+    </section>
   </section>
 
+  <!-- Multiple models: upload step. -->
+  <section id="viewMulti" class="view hidden">
+  <button type="button" class="back-link" data-go="home">&larr; Back</button>
+  <section class="upload-card" id="multiCard">
+    <h2>Analyze multiple models</h2>
+    <div class="warn-box">
+      <strong>This can take a long time.</strong> Every model is loaded and analysed on its own (growth, flux variability for blocked reactions,
+      exchange essentiality, annotation checks). Genome-scale models can take several minutes each, so a batch of many models may run for
+      a long while. Keep this tab open until it finishes, and start with two or three models if you are unsure.
+    </div>
+    <p class="muted">Compare several models side by side: growth, size, namespaces, blocked reactions, essential exchanges and more,
+      with automatic quality findings. Get the comparison as an Excel workbook and an HTML report.</p>
+    <label class="dropzone" id="multiDropzone">
+      <input id="multiFiles" type="file" multiple accept=".xml,.sbml,.json,.yml,.yaml,.mat,.gz,.zip,.bz2">
+      <strong>Drop two or more models here</strong>
+      <span>or click to choose several files</span>
+    </label>
+    <div class="report-options-slot"></div>
+    <button id="multiBtn" disabled>Compare models</button>
+    <span id="multiFilename"></span>
+    <span id="multiStatus"></span>
+    <div id="multiResults"></div>
+  </section>
+  </section>
+
+  <!-- Results for a single model. -->
   <section id="app" class="hidden">
+    <div class="results-bar" id="resultsBar">
+      <button type="button" id="newModelBtn">&#8634; Analyze a new model</button>
+      <span class="results-file" id="resultsFile"></span>
+      <span class="results-status" id="resultsStatus"></span>
+    </div>
     <div class="summary" id="summary"></div>
 
     <div class="app-toolbar">
@@ -64,6 +140,7 @@
       <button class="tab active" data-tab="overview">Summary</button>
       <button class="tab" data-tab="metabolites">Metabolites</button>
       <button class="tab" data-tab="reactions">Reactions</button>
+      <button class="tab" data-tab="genes">Genes</button>
       <button class="tab" data-tab="objective">Objective</button>
     </nav>
     <nav class="subnav hidden" data-module="diagnostics">
@@ -71,20 +148,25 @@
       <button class="tab" data-tab="exchanges">Exchange essentiality</button>
       <button class="tab" data-tab="gaps">Network Gaps &amp; Audits</button>
       <button class="tab" data-tab="balance">Reaction Balance</button>
+      <button class="tab" data-tab="balanceaudit">Balance Audit</button>
       <button class="tab" data-tab="precursors">Biomass Precursors</button>
       <button class="tab" data-tab="frog">FROG Report</button>
     </nav>
     <nav class="subnav hidden" data-module="debugging">
       <button class="tab" data-tab="debug" id="debugTab">Exchange Debugging</button>
       <button class="tab" data-tab="tracer">Pathway Tracer</button>
+      <button class="tab" data-tab="compare">Compare Models</button>
     </nav>
     <nav class="subnav hidden" data-module="annotation">
       <button class="tab" data-tab="annotation">ID namespaces &amp; annotation</button>
+      <button class="tab" data-tab="translate">SEED &rarr; VMH translation</button>
+      <button class="tab" data-tab="mnxtranslate">Translate via MetaNetX</button>
     </nav>
 
     <section id="overview" class="panel active"></section>
     <section id="metabolites" class="panel"></section>
     <section id="reactions" class="panel"></section>
+    <section id="genes" class="panel"></section>
     <section id="objective" class="panel"></section>
     <section id="minmed" class="panel"></section>
     <section id="exchanges" class="panel"></section>
@@ -93,8 +175,12 @@
     <section id="gaps" class="panel"></section>
     <section id="frog" class="panel"></section>
     <section id="balance" class="panel"></section>
+    <section id="balanceaudit" class="panel"></section>
     <section id="precursors" class="panel"></section>
     <section id="annotation" class="panel"></section>
+    <section id="compare" class="panel"></section>
+    <section id="translate" class="panel"></section>
+    <section id="mnxtranslate" class="panel"></section>
     <section id="references" class="panel"></section>
   </section>
 </main>
@@ -103,5 +189,16 @@
 
 <script src="/static/vendor/cytoscape.min.js"></script>
 <script src="/static/app.js?v={{ v }}"></script>
+<script src="/static/genes.js?v={{ v }}"></script>
+<script src="/static/report_charts.js?v={{ v }}"></script>
+<script src="/static/report_thresholds.js?v={{ v }}"></script>
+<script src="/static/list_export.js?v={{ v }}"></script>
+<script src="/static/compare.js?v={{ v }}"></script>
+<script src="/static/translate.js?v={{ v }}"></script>
+<script src="/static/metanetx_translate.js?v={{ v }}"></script>
+<script src="/static/balance_audit.js?v={{ v }}"></script>
+<script src="/static/report_common.js?v={{ v }}"></script>
+<script src="/static/multi_models.js?v={{ v }}"></script>
+<script src="/static/views.js?v={{ v }}"></script>
 </body>
 </html>

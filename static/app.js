@@ -121,7 +121,7 @@ analyzeBtn.addEventListener("click", async () => {
 
     // Show initial results
     renderAll();
-    $("app").classList.remove("hidden");
+    showView("results");
     goToTab("overview"); // Overview is always the landing page for a new model
     status.textContent = "Performing exchange knockouts…";
 
@@ -542,6 +542,8 @@ function renderAll() {
   renderReferences();
   renderBalance();
   renderPrecursors();
+  renderModelCompare();
+  renderTranslate(); renderMetanetxTranslate(); renderBalanceAudit(); renderGenes(); renderThresholdRows();
 }
 
 function renderSummary() {
@@ -1525,6 +1527,7 @@ async function runNetworkGaps() {
 }
 
 function renderNetworkGapsResults(data) {
+  if (typeof updateThresholdVerdicts === "function") setTimeout(updateThresholdVerdicts, 0);
   $("gapsResults").innerHTML = `
     <h3>Blocked reactions</h3>
     <div id="gapsBlockedWrap"></div>
@@ -2447,6 +2450,18 @@ function reportDocumentHtml(title, bodyHtml) {
     --bg:#f1f4f9; --card-bg:#ffffff; --border:#e2e8f0; --border-soft:#edf1f7;
     --text:#0f172a; --muted:#64748b; --muted-soft:#94a3b8;
     --good:#16a34a; --bad:#dc2626; --warn:#b45309;
+    --th-bg:#f8fafc; --row-alt:#fbfcfe; --card-alt:#fbfcfe; --note-bg:#fffbeb; --note-bd:#fde68a; --note-fg:#854d0e; --code-bg:rgba(15,23,42,.06);
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s-other:#8f8e88; --grid:#e3e2de;
+    color-scheme:light;
+  }
+  [data-theme="dark"] {
+    --accent:#6ea0ff; --accent-dark:#3b6fd4; --accent-soft:#222c4a;
+    --bg:#111622; --card-bg:#1a2133; --border:#2c3652; --border-soft:#252e46;
+    --text:#e8ebf3; --muted:#a6b0c6; --muted-soft:#7e8aa5;
+    --good:#3fbf8a; --bad:#f2766b; --warn:#e0a040;
+    --th-bg:#202941; --row-alt:#1e2638; --card-alt:#1e2638; --note-bg:#2a2414; --note-bd:#5c4a17; --note-fg:#f0d28a; --code-bg:rgba(255,255,255,.08);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#2aa02a; --s-other:#8f8e88; --grid:#34332f;
+    color-scheme:dark;
   }
   * { box-sizing:border-box; }
   body { margin:0; font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif; background:var(--bg); color:var(--text); }
@@ -2490,30 +2505,44 @@ function reportDocumentHtml(title, bodyHtml) {
   }
   h3 { font-size:13px; margin:18px 0 8px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
   .report-meta { color:var(--muted); font-size:13px; margin-bottom:4px; }
-  .report-note { padding:10px 13px; background:#fffbeb; border:1px solid #fde68a; border-left:3px solid var(--warn); border-radius:8px; color:#854d0e; margin-bottom:14px; font-size:12.5px; }
+  .report-note { padding:10px 13px; background:var(--note-bg); border:1px solid var(--note-bd); border-left:3px solid var(--warn); border-radius:8px; color:var(--note-fg); margin-bottom:14px; font-size:12.5px; }
   .report-note ul { margin:6px 0 0 18px; padding:0; }
   .report-note li { margin-bottom:4px; }
-  code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:rgba(15,23,42,.06); border-radius:4px; padding:1px 4px; font-size:11.5px; }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--code-bg); border-radius:4px; padding:1px 4px; font-size:11.5px; }
 
   .objective-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; margin-bottom:14px; }
-  .objective-card { border:1px solid var(--border); border-radius:12px; padding:14px 16px; background:#fbfcfe; }
+  .objective-card { border:1px solid var(--border); border-radius:12px; padding:14px 16px; background:var(--card-alt); }
   .objective-card .mini-stat-label { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); font-weight:700; }
   .reaction-expr { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.5; word-break:break-word; margin-top:6px; }
   .biomass-details { border:1px solid var(--border); border-radius:12px; margin-bottom:14px; overflow:hidden; }
-  .biomass-details summary { cursor:pointer; padding:10px 14px; font-weight:700; font-size:13px; background:#f8fafc; }
+  .biomass-details summary { cursor:pointer; padding:10px 14px; font-weight:700; font-size:13px; background:var(--th-bg); }
   .biomass-details .biomass-body { padding:4px 16px 14px; margin:0; }
   .stoich { color:var(--muted); font-size:11.5px; margin-top:4px; }
 
   table { width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:8px; }
   th, td { padding:8px 10px; border-bottom:1px solid var(--border-soft); text-align:left; vertical-align:top; }
-  th { background:#f8fafc; position:sticky; top:0; font-weight:700; color:#334155; white-space:nowrap; }
-  tbody tr:nth-child(even) { background:#fbfcfe; }
+  th { background:var(--th-bg); position:sticky; top:0; font-weight:700; color:var(--text); white-space:nowrap; }
+  tbody tr:nth-child(even) { background:var(--row-alt); }
   tbody tr:hover { background:var(--accent-soft); }
   .table-scroll { max-height:560px; overflow:auto; border:1px solid var(--border-soft); border-radius:10px; margin-bottom:18px; }
 
   .report-footer { text-align:center; color:var(--muted-soft); font-size:11.5px; padding:24px 0 4px; border-top:1px solid var(--border-soft); margin-top:8px; }
 
+  .report-toggle { position:fixed; top:12px; right:14px; z-index:5; border:1px solid var(--border); background:var(--card-bg); color:var(--text); border-radius:999px; padding:5px 12px; font-size:12px; cursor:pointer; }
+  .rc-figure { margin:14px 0 18px; }
+  .rc-figure figcaption { font-size:13px; font-weight:700; margin-bottom:6px; color:var(--text); }
+  .rc-svg { width:100%; max-width:760px; height:auto; display:block; }
+  .rc-t { fill:var(--muted); font:12px -apple-system,"Segoe UI",Inter,sans-serif; }
+  .rc-v { fill:var(--text); font-weight:600; }
+  .rc-axis, .rc-grid { stroke:var(--grid); stroke-width:1; }
+  .rc-legend { display:flex; flex-wrap:wrap; gap:4px 16px; margin-top:6px; font-size:12px; color:var(--muted); }
+  .rc-legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px; }
+  .rc-note { color:var(--muted); font-size:12px; margin-top:2px; }
+  .rc-grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:6px 24px; }
+  .finding-list { margin:6px 0 14px 18px; padding:0; }
+  .finding-list li { margin-bottom:5px; }
   @media print {
+    .report-toggle { display:none; }
     body { background:#fff; }
     .report-cover { border-radius:0; margin:0 0 20px; }
     .report-section { box-shadow:none; break-inside:avoid-page; }
@@ -2523,6 +2552,7 @@ function reportDocumentHtml(title, bodyHtml) {
 </style>
 </head>
 <body>
+<button class="report-toggle" type="button" onclick="var r=document.documentElement;r.dataset.theme=r.dataset.theme==='dark'?'light':'dark';this.textContent=r.dataset.theme==='dark'?'Light theme':'Dark theme'">Dark theme</button>
 <div class="report-wrap">
 ${bodyHtml}
 <div class="report-footer">Generated by the Genome-scale Model Inspector — ${escapeHtml(new Date().toLocaleString())}</div>
@@ -2679,6 +2709,7 @@ function sanitizeForFilename(name) {
 // ---------------------------------------------------------------------------
 
 let FROG_RESULT = null;
+let FROG_PARAMS = null; // query string FROG_RESULT was computed with; the report reuses it when identical
 let CURRENT_FROG_EVENTSOURCE = null;
 
 const FROG_FVA_CSV_COLUMNS = [
@@ -2753,6 +2784,7 @@ function runFrogReport() {
   progressStart("frogProgress");
   $("frogResults").innerHTML = "";
   FROG_RESULT = null;
+  FROG_PARAMS = null;
 
   const modelId = MODEL_ID;
   const params = new URLSearchParams({
@@ -2761,7 +2793,8 @@ function runFrogReport() {
     include_reaction_deletions: includeRxnDel ? "1" : "0",
     include_gene_deletions: includeGeneDel ? "1" : "0",
   });
-  const eventSource = new EventSource(`/api/frog-report/${modelId}?${params.toString()}`);
+  const paramsKey = params.toString();
+  const eventSource = new EventSource(`/api/frog-report/${modelId}?${paramsKey}`);
   CURRENT_FROG_EVENTSOURCE = eventSource;
 
   eventSource.onmessage = (event) => {
@@ -2779,6 +2812,7 @@ function runFrogReport() {
       if (CURRENT_FROG_EVENTSOURCE === eventSource) CURRENT_FROG_EVENTSOURCE = null;
     } else if (msg.type === "complete") {
       FROG_RESULT = msg;
+      FROG_PARAMS = paramsKey;
       $("frogStatus").textContent = msg.note || "Done.";
       progressDone("frogProgress");
       renderFrogResults(msg);
@@ -2910,10 +2944,14 @@ function buildFrogSectionBody(data) {
       ? `<div class="report-meta">Fraction of optimum: ${fmt(data.fva.fraction_of_optimum, 4)}</div>${staticTableHtml(FROG_FVA_CSV_COLUMNS, data.fva.reactions, { emptyMessage: "No reactions." })}`
       : `<div class="report-note">Not included in this run.</div>`}
     <h3>Reaction deletions (R)</h3>
+    ${data.reaction_deletions ? reportStatusStack(data.reaction_deletions.reactions, "status", "Reaction deletions by solver status") +
+      rcHist(data.reaction_deletions.reactions.map(r => r.growth), { title: "Growth after deleting each reaction", xLabel: "objective value", bins: 20 }) : ""}
     ${data.reaction_deletions
       ? staticTableHtml(FROG_REACTION_DELETION_CSV_COLUMNS, data.reaction_deletions.reactions, { emptyMessage: "No reactions." })
       : `<div class="report-note">Not included in this run.</div>`}
     <h3>Gene deletions (G)</h3>
+    ${data.gene_deletions ? reportStatusStack(data.gene_deletions.genes, "status", "Gene deletions by solver status") +
+      rcHist(data.gene_deletions.genes.map(g => g.growth), { title: "Growth after deleting each gene", xLabel: "objective value", bins: 20 }) : ""}
     ${data.gene_deletions
       ? staticTableHtml(FROG_GENE_DELETION_CSV_COLUMNS, data.gene_deletions.genes, { emptyMessage: "No genes." })
       : `<div class="report-note">Not included in this run.</div>`}
@@ -2947,11 +2985,14 @@ function buildFrogReportHtml(data) {
 // ---------------------------------------------------------------------------
 
 const REPORT_SECTIONS = [
-  { key: "overview", title: "Overview", hint: "Model stats, compartments, and the diet/media summary." },
-  { key: "metabolites", title: "Metabolites", hint: "The full metabolite table." },
-  { key: "reactions", title: "Reactions", hint: "The full reaction table." },
+  { key: "quality", title: "Quality findings", hint: "Key statistics and automatic findings against the thresholds below." },
+  { key: "overview", title: "Overview", hint: "Model stats, compartments and the diet/media summary, with charts." },
+  { key: "metabolites", title: "Metabolites", hint: "The full metabolite table, with a formula-coverage chart." },
+  { key: "reactions", title: "Reactions", hint: "The full reaction table, with reaction-type and subsystem charts." },
+  { key: "genes", title: "Genes", hint: "Every gene with its reactions, with charts." },
   { key: "objective", title: "Objective", hint: "Objective metabolites and their coefficients." },
-  { key: "exchanges", title: "Exchange essentiality", hint: "Every exchange, tested for knockout essentiality." },
+  { key: "exchanges", title: "Exchange essentiality", hint: "Every exchange, tested for knockout essentiality, with a chart." },
+  { key: "balance", title: "Reaction balance", hint: "Mass/charge balance status and the problem reactions." },
   { key: "minimal_medium", title: "Minimal medium", hint: "Smallest nutrient set for a chosen growth cutoff.", cutoff: true },
   { key: "network_gaps", title: "Network gaps (blocked reactions & dead ends)", hint: "Structural connectivity gaps under the model's current bounds." },
   { key: "demand_sink_audit", title: "Demand & sink audit", hint: "Every demand/sink reaction's usage and knockout essentiality." },
@@ -2981,10 +3022,19 @@ function renderReportModal() {
         </div>
         <div class="modal-body">
           <div class="note">
-            Pick which sections to include and, for the ones that need it, a cutoff. Each section is recomputed
-            fresh with the settings below — independent of whatever's currently shown in the tabs — then assembled
-            into one self-contained HTML file.
+            Pick the sections to include. Analyses you have already run in the tabs are reused rather than repeated;
+            the rest are computed now. The result is one self-contained HTML report with charts (light or dark, switchable
+            in the page), and optionally an Excel workbook of the key statistics and findings.
           </div>
+          <details class="report-options" id="reportThresholds">
+            <summary>Quality thresholds and Excel</summary>
+            <div class="toolbar">
+              ${thresholdInputHtml("mu_min", "Growth rate min (1/h)")} ${thresholdInputHtml("mu_max", "max (1/h)")}
+              ${thresholdInputHtml("blocked_warn_pct", "Warn if blocked reactions &gt; %")} ${thresholdInputHtml("deadend_warn_pct", "dead-end metabolites &gt; %")}
+            </div>
+            <div class="toolbar"><label><input type="checkbox" id="reportExcel"> Also download the Excel workbook</label></div>
+            <div class="stoich">The same thresholds appear on the Summary and Network Gaps tabs and stay in sync.</div>
+          </details>
           <div id="reportSectionList"></div>
           <div id="reportSavePath" style="margin-top:18px;"></div>
         </div>
@@ -3031,6 +3081,7 @@ function renderReportModal() {
     `;
   }).join("");
 
+  bindThresholdInputs($("reportThresholds"));
   const getPath = attachSavePathPicker($("reportSavePath"), "reportSavePath", reportDefaultFilename());
   $("reportGenerateBtn").addEventListener("click", () => runGenerateReport(getPath));
 }
@@ -3096,6 +3147,23 @@ function reportUnmappedWarningHtml(kind, limit) {
   `;
 }
 
+const BALANCE_COLORS = { balanced: "var(--good)", unbalanced: "var(--bad)", unknown: "var(--warn)", "n/a": "var(--s-other)" };
+
+function reportStatusStack(rows, key, title, colors) {
+  const counts = {};
+  rows.forEach(r => { counts[r[key]] = (counts[r[key]] || 0) + 1; });
+  const order = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+  return rcStack(order.map((k, i) => ({ label: k, value: counts[k], color: (colors && colors[k]) || RC_SERIES[i % RC_SERIES.length] })), { title });
+}
+
+function reportOverviewCharts() {
+  const rxnTypes = reportStatusStack(DATA.reactions, "type", "Reactions by type");
+  const bal = reportStatusStack(DATA.reactions, "balance", "Reaction balance status", BALANCE_COLORS);
+  const comps = rcBars(rcCountBy(DATA.metabolites, m => COMP_NAMES[m.compartment] || m.compartment, 8), { title: "Metabolites per compartment" });
+  const subs = rcBars(rcCountBy(DATA.reactions.filter(r => r.subsystem), r => r.subsystem, 12), { title: "Reactions per subsystem (top 12)" });
+  return `${rxnTypes}${bal}<div class="rc-grid2">${comps}${subs}</div>`;
+}
+
 function reportOverviewSectionHtml() {
   const s = DATA.stats;
   const d = DATA.diet;
@@ -3115,6 +3183,7 @@ function reportOverviewSectionHtml() {
     <h2 id="sec-overview">Overview</h2>
     ${staticTableHtml([{ key: "k", label: "Field" }, { key: "v", label: "Value" }], rows)}
     ${dietNote}
+    ${reportOverviewCharts()}
     </section>
   `;
 }
@@ -3128,6 +3197,8 @@ function reportMetabolitesSectionHtml() {
     <section class="report-section">
     <h2 id="sec-metabolites">Metabolites</h2>
     ${reportUnmappedWarningHtml("metabolite", 200)}
+    ${reportStatusStack(DATA.metabolites.map(m => ({ f: (m.formula || "").trim() ? "formula present" : "formula missing" })), "f", "Metabolites with a chemical formula", { "formula present": "var(--s1)", "formula missing": "var(--warn)" })}
+    ${rcHist(DATA.metabolites.map(m => m.reaction_count || 0), { title: "Reactions per metabolite", xLabel: "number of reactions", bins: 20 })}
     ${staticTableHtml(METABOLITE_TABLE_COLUMNS, DATA.metabolites, { emptyMessage: "No metabolites." })}
     </section>
   `;
@@ -3138,7 +3209,53 @@ function reportReactionsSectionHtml() {
     <section class="report-section">
     <h2 id="sec-reactions">Reactions</h2>
     ${reportUnmappedWarningHtml("reaction", 200)}
+    ${reportStatusStack(DATA.reactions, "type", "Reactions by type")}
+    ${reportStatusStack(DATA.reactions.map(r => ({ f: Math.abs(r.wt_flux || 0) > 1e-9 ? "carries flux (WT)" : "no flux (WT)" })), "f", "Reactions carrying flux in the wild-type solution", { "carries flux (WT)": "var(--s1)", "no flux (WT)": "var(--s-other)" })}
+    ${rcBars(rcCountBy(DATA.reactions.filter(r => r.subsystem), r => r.subsystem, 15), { title: "Reactions per subsystem (top 15)" })}
     ${staticTableHtml(REACTION_TABLE_COLUMNS, DATA.reactions, { emptyMessage: "No reactions." })}
+    </section>
+  `;
+}
+
+function reportGenesSectionHtml() {
+  const genes = DATA.genes || [];
+  const top = [...genes].sort((a, b) => b.reaction_count - a.reaction_count).slice(0, 15).map(g => ({ label: g.name ? `${g.id} (${g.name})` : g.id, value: g.reaction_count }));
+  return `
+    <section class="report-section">
+    <h2 id="sec-genes">Genes</h2>
+    ${reportStatusStack(genes.map(g => ({ f: g.lost_on_ko.length ? "deletion disables a reaction" : "no reaction depends on it alone" })), "f", "Genes by effect of a single deletion", { "deletion disables a reaction": "var(--s2)", "no reaction depends on it alone": "var(--s1)" })}
+    ${rcHist(genes.map(g => g.reaction_count), { title: "Reactions per gene", xLabel: "number of reactions", bins: 15 })}
+    ${rcBars(top, { title: "Genes with the most reactions (top 15)" })}
+    ${staticTableHtml(GENE_TABLE_COLUMNS, genes, { emptyMessage: "This model has no genes defined." })}
+    </section>
+  `;
+}
+
+function reportBalanceSectionHtml(data) {
+  const c = data.counts || {};
+  return `
+    <section class="report-section">
+    <h2 id="sec-balance">Reaction balance</h2>
+    ${rcStack(Object.keys(c).map(k => ({ label: k, value: c[k], color: BALANCE_COLORS[k] || "var(--s-other)" })), { title: "Reactions by balance status" })}
+    ${staticTableHtml([{ key: "id", label: "Reaction" }, { key: "name", label: "Name" }, { key: "status", label: "Status" }, { key: "problem", label: "Problem" }],
+      data.reactions || [], { emptyMessage: "Every checkable reaction is balanced." })}
+    </section>
+  `;
+}
+
+function reportQualitySectionHtml(report) {
+  const m = report.models[0];
+  const rows = report.columns.map(c => ({ k: c.label, v: reportCell(m.metrics[c.key]) }));
+  const t = REPORT_THRESHOLDS;
+  return `
+    <section class="report-section">
+    <h2 id="sec-quality">Quality findings</h2>
+    <div class="report-meta">Thresholds: growth ${t.mu_min}–${t.mu_max} 1/h, blocked reactions &gt; ${t.blocked_warn_pct}%, dead-end metabolites &gt; ${t.deadend_warn_pct}%.</div>
+    ${m.findings.length
+      ? `<ul class="finding-list">${m.findings.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>`
+      : `<div class="report-note">No threshold violations.</div>`}
+    <h3>Key statistics</h3>
+    ${staticTableHtml([{ key: "k", label: "Statistic" }, { key: "v", label: "Value" }], rows)}
     </section>
   `;
 }
@@ -3153,8 +3270,17 @@ function reportObjectiveSectionHtml() {
   `;
 }
 
+function reportExchangesCharts() {
+  const tested = (DATA.exchanges || []).filter(e => e.ko_growth_fraction !== null && e.ko_growth_fraction !== undefined);
+  if (!tested.length) return "";
+  const lowest = [...tested].sort((a, b) => a.ko_growth_fraction - b.ko_growth_fraction).slice(0, 20)
+    .map(e => ({ label: e.id, value: Math.round(1000 * e.ko_growth_fraction) / 10, color: e.essential ? "var(--s2)" : "var(--s1)" }));
+  return reportStatusStack(tested.map(e => ({ f: e.essential ? "essential" : "not essential" })), "f", "Exchanges by essentiality", { essential: "var(--s2)", "not essential": "var(--s1)" }) +
+    rcBars(lowest, { title: "Growth retained after knocking out each exchange (% of WT, 20 lowest)", unit: "%", note: "Orange bars are essential exchanges (growth below 5% of WT)." });
+}
+
 function reportExchangesSectionHtml() {
-  return `<section class="report-section"><h2 id="sec-exchanges">Exchange essentiality</h2>${staticTableHtml(EXCHANGE_TABLE_COLUMNS, DATA.exchanges || [], { emptyMessage: "No exchange data (essentiality test may not have finished yet)." })}</section>`;
+  return `<section class="report-section"><h2 id="sec-exchanges">Exchange essentiality</h2>${reportExchangesCharts()}${staticTableHtml(EXCHANGE_TABLE_COLUMNS, DATA.exchanges || [], { emptyMessage: "No exchange data (essentiality test may not have finished yet)." })}</section>`;
 }
 
 function reportMinimalMediumSectionHtml(data) {
@@ -3162,6 +3288,8 @@ function reportMinimalMediumSectionHtml(data) {
     <section class="report-section">
     <h2 id="sec-minmed">Minimal medium</h2>
     <div class="report-note">${escapeHtml(data.note || "")}</div>
+    ${rcBars((data.components || []).map(c => ({ label: c.metabolite_name || c.exchange_id, value: Math.abs(c.uptake_flux || 0) })).sort((a, b) => b.value - a.value).slice(0, 25),
+      { title: "Uptake flux of each minimal-medium component (top 25)", unit: "mmol/gDW/h" })}
     ${staticTableHtml(MINMED_CSV_COLUMNS, data.components || [], { emptyMessage: "No components." })}
     </section>
   `;
@@ -3172,6 +3300,12 @@ function reportNetworkGapsSectionHtml(data) {
     <section class="report-section">
     <h2 id="sec-gaps">Network gaps</h2>
     <div class="report-note">${escapeHtml(data.note || "")}</div>
+    ${rcStack([
+      { label: "blocked", value: (data.blocked_reactions || []).length, color: "var(--s2)" },
+      { label: "can carry flux", value: Math.max(0, DATA.stats.reactions - (data.blocked_reactions || []).length), color: "var(--s1)" },
+    ], { title: "Reactions that can carry flux" })}
+    ${rcBars(rcCountBy(data.blocked_reactions || [], r => r.subsystem, 12), { title: "Blocked reactions per subsystem (top 12)" })}
+    ${rcBars(rcCountBy(data.dead_end_metabolites || [], d => NETGAPS_REASON_LABELS[d.reason] || d.reason, 6), { title: "Dead-end metabolites by reason" })}
     <h3>Blocked reactions</h3>
     ${staticTableHtml(NETGAPS_BLOCKED_CSV_COLUMNS, data.blocked_reactions || [], { emptyMessage: "No blocked reactions." })}
     <h3>Dead-end metabolites</h3>
@@ -3185,6 +3319,7 @@ function reportDemandSinkSectionHtml(data) {
     <section class="report-section">
     <h2 id="sec-dsaudit">Demand &amp; sink audit</h2>
     <div class="report-note">${escapeHtml(data.note || "")}</div>
+    ${reportStatusStack((data.rows || []).map(r => ({ f: `${r.kind}${r.essential ? " (essential)" : ""}` })), "f", "Demand and sink reactions")}
     ${staticTableHtml(DSAUDIT_CSV_COLUMNS, data.rows || [], { emptyMessage: "No demand or sink reactions." })}
     </section>
   `;
@@ -3228,6 +3363,32 @@ async function runGenerateReport(getPath) {
 
     // Overview / Metabolites / Reactions / Objective / Exchanges are already
     // in memory from the initial analysis -- no re-fetch needed.
+    const wantExcel = !!($("reportExcel") && $("reportExcel").checked);
+    if (wantSections.quality || wantExcel) {
+      setStatus("Computing key statistics and findings…");
+      const t = REPORT_THRESHOLDS;
+      const res = await fetch("/api/model-report", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model_id: MODEL_ID, mu_min: t.mu_min, mu_max: t.mu_max, blocked_warn_pct: t.blocked_warn_pct,
+          deadend_warn_pct: t.deadend_warn_pct, essentiality: "1", minimal_medium: "1", network_gaps: "1", demand_sink: "1", balance: "1" }),
+      });
+      let qualityReport = null;
+      await readNdjson(res, ev => {
+        if (ev.type === "error") throw new Error(ev.error);
+        if (ev.type === "complete") qualityReport = ev.report;
+      });
+      if (!qualityReport) throw new Error("The quality analysis ended without a result.");
+      if (wantSections.quality) {
+        sectionsHtml.push(reportQualitySectionHtml(qualityReport));
+        tocEntries.push(["quality", "Quality findings"]);
+      }
+      if (wantExcel) {
+        const a = document.createElement("a");
+        a.href = `/api/model-report/${encodeURIComponent(MODEL_ID)}/download?format=xlsx`;
+        a.download = "model_report.xlsx";
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+    }
     if (wantSections.overview) {
       sectionsHtml.push(reportOverviewSectionHtml());
       tocEntries.push(["overview", "Overview"]);
@@ -3240,6 +3401,10 @@ async function runGenerateReport(getPath) {
       sectionsHtml.push(reportReactionsSectionHtml());
       tocEntries.push(["reactions", "Reactions"]);
     }
+    if (wantSections.genes) {
+      sectionsHtml.push(reportGenesSectionHtml());
+      tocEntries.push(["genes", "Genes"]);
+    }
     if (wantSections.objective) {
       sectionsHtml.push(reportObjectiveSectionHtml());
       tocEntries.push(["objective", "Objective"]);
@@ -3247,6 +3412,14 @@ async function runGenerateReport(getPath) {
     if (wantSections.exchanges) {
       sectionsHtml.push(reportExchangesSectionHtml());
       tocEntries.push(["exchanges", "Exchange essentiality"]);
+    }
+    if (wantSections.balance) {
+      setStatus("Checking reaction balance…");
+      const res = await fetch("/api/balance-diagnostics", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model_id: MODEL_ID }) });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Balance check failed.");
+      sectionsHtml.push(reportBalanceSectionHtml(data));
+      tocEntries.push(["balance", "Reaction balance"]);
     }
     if (wantSections.minimal_medium) {
       let data = MINMED_RESULT;
@@ -3299,12 +3472,21 @@ async function runGenerateReport(getPath) {
       tocEntries.push(["tracer", "Pathway tracer"]);
     }
     if (wantSections.frog) {
-      setStatus("Running FROG report (this can take a while for large models)…");
       const fraction = parseFloat(($("reportFrogFraction") || {}).value) || 1.0;
       const includeFva = $("reportFrogFva") ? $("reportFrogFva").checked : true;
       const includeRxnDel = $("reportFrogRxnDel") ? $("reportFrogRxnDel").checked : true;
       const includeGeneDel = $("reportFrogGeneDel") ? $("reportFrogGeneDel").checked : true;
-      const frogData = await runFrogReportForModal(fraction, includeFva, includeRxnDel, includeGeneDel, setStatus);
+      const wantedKey = new URLSearchParams({
+        fva_fraction: String(fraction),
+        include_fva: includeFva ? "1" : "0",
+        include_reaction_deletions: includeRxnDel ? "1" : "0",
+        include_gene_deletions: includeGeneDel ? "1" : "0",
+      }).toString();
+      let frogData = FROG_RESULT && FROG_PARAMS === wantedKey ? FROG_RESULT : null; // same settings already run in the FROG tab
+      if (!frogData) {
+        setStatus("Running FROG report (this can take a while for large models)…");
+        frogData = await runFrogReportForModal(fraction, includeFva, includeRxnDel, includeGeneDel, setStatus);
+      }
       sectionsHtml.push(buildFrogSectionBody(frogData));
       tocEntries.push(["frog", "FROG report"]);
     }
@@ -3377,7 +3559,13 @@ function memoteTargetTab(name) {
 function memoteStageText(st) {
   if (st.stage === "retrying") return "The solver stopped unexpectedly; retrying with the exact (slower) solver…";
   if (st.stage === "rendering") return "Building the report…";
-  if (st.stage === "testing" && st.total) return `Running check ${Math.min(st.done + 1, st.total)} of ${st.total}${st.current ? " — " + st.current.replace(/^test_/, "").replace(/_/g, " ") : ""}`;
+  if (st.stage === "testing" && st.total) {
+    // `running` is the test in progress; `current` is the last one that finished.
+    const name = (st.running || st.current || "").replace(/^test_/, "").replace(/_/g, " ");
+    const skipped = (st.skipped || []).length
+      ? ` (skipped for taking too long: ${st.skipped.map(n => n.replace(/^test_/, "").replace(/_/g, " ")).join(", ")})` : "";
+    return `Running check ${Math.min(st.done + 1, st.total)} of ${st.total}${name ? " — " + name : ""}${skipped}. A check that makes no progress for 3 minutes is skipped automatically.`;
+  }
   return "Loading the model…";
 }
 
@@ -3473,10 +3661,12 @@ function renderMemoteBox() {
   } else if (st && st.status === "done" && st.result) {
     body = memoteResultHtml(st.result);
   } else {
-    const msg = st && st.status === "error" ? `<div class="error" style="margin-bottom:10px;white-space:pre-wrap;">${escapeHtml(st.error || "MEMOTE failed.")}</div>`
+    const msg = st && st.status === "error" ? `<div class="error" style="margin-bottom:10px;"><strong>MEMOTE did not run.</strong><pre style="white-space:pre-wrap;max-height:260px;overflow:auto;margin:6px 0 0;font-size:12px;">${escapeHtml(st.error || "MEMOTE failed.")}</pre></div>`
       : st && st.status === "cancelled" ? `<div class="note">The run was cancelled.</div>` : "";
     body = `${hint}${msg}<div class="memote-actions"><button type="button" data-memote-run="1">Run MEMOTE</button>
-      <span class="stoich">Takes from under a minute to several minutes depending on model size.</span></div>`;
+      <span class="stoich">Takes from under a minute to several minutes depending on model size.</span>
+      <button type="button" class="secondary" data-memote-test="1">Test MEMOTE setup</button></div>
+      <pre id="memoteTestOut" class="hidden" style="white-space:pre-wrap;font-size:12px;background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:10px;max-height:220px;overflow:auto;"></pre>`;
   }
   box.innerHTML = `
     <div class="memote-card">
@@ -3490,6 +3680,15 @@ function renderMemoteBox() {
     </div>`;
   box.querySelector("[data-memote-run]")?.addEventListener("click", startMemote);
   box.querySelector("[data-memote-rerun]")?.addEventListener("click", startMemote);
+  box.querySelector("[data-memote-test]")?.addEventListener("click", async (ev) => {
+    const out = $("memoteTestOut");
+    out.classList.remove("hidden");
+    out.textContent = "Testing…";
+    try {
+      const r = await (await fetch("/api/memote-selftest")).json();
+      out.textContent = (r.ok ? "OK — MEMOTE can be used by this app.\n\n" : "MEMOTE cannot be loaded by this app.\n\n") + r.output;
+    } catch (err) { out.textContent = "Could not run the test: " + err.message; }
+  });
   box.querySelector("[data-memote-cancel]")?.addEventListener("click", cancelMemote);
   box.querySelector("[data-memote-toggle]")?.addEventListener("click", () => { MEMOTE_SHOW_ALL = !MEMOTE_SHOW_ALL; renderMemoteBox(); });
   box.querySelectorAll("[data-goto]").forEach(b => b.addEventListener("click", ev => {

@@ -61,3 +61,18 @@ All three results can be exported to CSV.
 - On-request MEMOTE run: background process, progress bar, cancel, auto-retry with `glpk_exact`, score and section scores, "needs attention" list linking to the relevant tab, full MEMOTE HTML report (open/download).
 - References tab: MEMOTE, COBRApy, Thiele & Palsson 2010, FROG/COMBINE, MetaNetX, libSBML, Cytoscape.js, GLPK.
 - ID namespace / annotation cards moved to Annotation & Translation > ID namespaces & annotation.
+
+## Compare Models tab
+
+Upload a second model and compare it with the loaded one. The naming conventions of both models (metabolite and reaction namespaces, compartment tags) are shown first, with whether they agree. Genes, metabolites, reactions and biomass components are then listed as shared, only in the first model, or only in the second. Each list can be copied to the clipboard or downloaded as CSV, with MetaNetX ids alongside the model ids.
+
+## SEED to VMH translation tab
+
+Translates a ModelSEED-namespace model to VMH ids using the translation tables in the data folder. Every metabolite and reaction is reported as mapped, as an error (ambiguous in the table, or the new id would clash with another), or as having no available mapping; each list can be copied or downloaded. The translated model (SBML and JSON) can be downloaded together with the report as one zip.
+
+## Reports, translation and audit
+
+- Compare Models: Excel and HTML reports; bounds and coefficient differences; pairing by equation.
+- Translate via MetaNetX: any namespace to MetaNetX, BiGG, VMH, ModelSEED, KEGG or MetaCyc.
+- Balance Audit: mapping and formula checks, verified fix suggestions, copy / CSV / Excel.
+- Model report (Overview) and Analyze multiple models (landing page): statistics, findings, Excel and HTML.

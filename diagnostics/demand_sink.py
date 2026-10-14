@@ -12,10 +12,16 @@ FBA solution at all -- a demand/sink with zero flux AND zero essentiality is
 a reasonable candidate for "is this reaction still needed?"
 """
 from annotation.naming import clean_metabolite_display_name
-from core.shared import safe_float, subsystem_value
+from core.memo import not_error, remember
+from core.shared import safe_float, subsystem_value, wt_solution as solve_wt
 
 
 def compute_demand_sink_audit(model):
+    """Memoized per model; see _compute_demand_sink_audit."""
+    return remember(model, "demand_sink_audit", lambda: _compute_demand_sink_audit(model), cache_if=not_error)
+
+
+def _compute_demand_sink_audit(model):
     """Audit every demand and sink reaction: metabolite, bounds/
     reversibility, whether it carries flux in the current (fresh) FBA
     solution, and a reaction-knockout essentiality test identical in
@@ -25,7 +31,7 @@ def compute_demand_sink_audit(model):
     carry the same repeated-solve numerical risk noted on
     find_blocked_reactions -- this pattern has not shown that failure mode.
     """
-    wt_solution = model.optimize()
+    wt_solution = solve_wt(model)
     if wt_solution.status != "optimal":
         return {"error": f"WT optimization was not optimal (status: {wt_solution.status})."}
     wt_growth = max(0.0, safe_float(wt_solution.objective_value) or 0.0)

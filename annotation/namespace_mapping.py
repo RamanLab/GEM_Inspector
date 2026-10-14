@@ -51,6 +51,7 @@ NS_LABELS = {
 
 _MNX_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 _xref_cache = {"chem": None, "reac": None}
+_detect_cache = {}
 
 
 def _load_xref(kind):
@@ -74,6 +75,12 @@ def _load_xref(kind):
         xref = {}
     _xref_cache[kind] = xref
     return xref
+
+
+def load_xref(kind):
+    """The bundled MetaNetX xref table for "chem" or "reac" as
+    {namespace: {id: mnx_id}} (empty if the data file is missing)."""
+    return _load_xref(kind)
 
 
 def detect_namespace_and_map(id_pairs, xref, ns_list):
@@ -125,9 +132,21 @@ def detect_namespace_and_map(id_pairs, xref, ns_list):
     return best_ns, coverage, best_example, id_to_mnx
 
 
+def _detect_cached(kind, id_pairs, xref_kind, namespaces):
+    """Detection depends only on the ids, so identical id lists (the same model
+    analysed by several tabs, or a translated copy that kept its ids) reuse one result."""
+    key = (kind, tuple(id_pairs))
+    if key not in _detect_cache:
+        if len(_detect_cache) >= 8:
+            _detect_cache.pop(next(iter(_detect_cache)))
+        _detect_cache[key] = detect_namespace_and_map(id_pairs, _load_xref(xref_kind), namespaces)
+    ns, coverage, example, mapping = _detect_cache[key]
+    return ns, coverage, example, dict(mapping)
+
+
 def detect_metabolite_namespace_and_map(model):
     id_pairs = [(met.id, metabolite_base_id_preserve_case(met.id)) for met in model.metabolites]
-    return detect_namespace_and_map(id_pairs, _load_xref("chem"), CHEM_NAMESPACES)
+    return _detect_cached("chem", id_pairs, "chem", CHEM_NAMESPACES)
 
 
 def detect_reaction_namespace_and_map(model):
@@ -135,7 +154,7 @@ def detect_reaction_namespace_and_map(model):
     # (e.g. "EX_glc__D_e"), so -- unlike metabolites -- they're looked up
     # as-is, with no compartment-suffix stripping.
     id_pairs = [(rxn.id, rxn.id) for rxn in model.reactions]
-    return detect_namespace_and_map(id_pairs, _load_xref("reac"), REAC_NAMESPACES)
+    return _detect_cached("reac", id_pairs, "reac", REAC_NAMESPACES)
 
 
 def _normalize_name_for_match(name):

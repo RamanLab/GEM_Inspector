@@ -141,6 +141,12 @@ def load_uploaded_model(path: Path):
     return read_sbml_model(str(path))
 
 
+def wt_solution(model):
+    """FBA optimum under the model's own bounds, solved once per cached model."""
+    from core.memo import remember
+    return remember(model, "wt_solution", model.optimize)
+
+
 def classify_reactions(model):
     """Classify every reaction once and return {reaction_id: type}.
 

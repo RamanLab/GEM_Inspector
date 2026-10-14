@@ -9,7 +9,7 @@ from pathlib import Path
 from flask import Blueprint, Response, jsonify, render_template, request, send_file
 from werkzeug.utils import secure_filename
 
-from core.shared import ALLOWED, MODEL_CACHE, load_uploaded_model, safe_float, store_original_file, touch_model_cache
+from core.shared import ALLOWED, MODEL_CACHE, load_uploaded_model, safe_float, store_original_file, touch_model_cache, wt_solution as solve_wt
 from diagnostics.diet import apply_diet_to_model, parse_diet_file
 from overview import memote_jobs
 from overview.analysis import analyze_model, quick_analyze, stream_ko_analysis
@@ -92,7 +92,7 @@ def api_analyze_ko(model_id):
     model, _ = MODEL_CACHE[model_id]
 
     try:
-        wt_solution = model.optimize()
+        wt_solution = solve_wt(model)  # already solved by the initial analysis
         wt_growth = safe_float(wt_solution.objective_value) or 0.0
         fluxes = wt_solution.fluxes if hasattr(wt_solution, "fluxes") else {}
 
@@ -175,3 +175,8 @@ def api_memote_report(model_id):
         return jsonify({"error": "No MEMOTE report available."}), 404
     return send_file(path, mimetype="text/html", as_attachment=request.args.get("download") == "1",
                      download_name="memote_report.html")
+
+
+@overview_bp.get("/api/memote-selftest")
+def api_memote_selftest():
+    return jsonify(memote_jobs.selftest())
