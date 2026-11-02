@@ -10,7 +10,7 @@
 <header class="topbar">
   <div>
     <h1><a href="#" id="homeLink">Genome-scale Model Inspector</a></h1>
-    <p>Inspect, debug, compare and annotate COBRA genome-scale metabolic models.</p>
+    <p>A platform for the quality assessment, diagnosis, comparison and annotation of COBRA genome-scale metabolic models.</p>
   </div>
 </header>
 
@@ -21,16 +21,16 @@
       <button type="button" class="choice-card" id="chooseSingle">
         <span class="choice-icon">1</span>
         <strong>Inspect a single model</strong>
-        <span>Upload one model and explore it in depth: overview, diagnostics, debugging and annotation tools.</span>
+        <span>Upload one model for in-depth characterisation through overview, diagnostic, debugging and annotation modules.</span>
       </button>
       <button type="button" class="choice-card" id="chooseMulti">
         <span class="choice-icon">N</span>
         <strong>Analyze multiple models</strong>
-        <span>Upload several models and get a side-by-side comparison with quality findings, as Excel and HTML reports.</span>
+        <span>Upload several models for a side-by-side comparison with quality findings, reported as Excel and HTML.</span>
       </button>
     </div>
     <div class="legend">
-      <span class="legend-title">What is in the toolkit</span>
+      <span class="legend-title">Toolkit modules</span>
       <span class="status-chip available">Available</span>
       <span class="status-chip planned">Coming soon</span>
     </div>
@@ -148,7 +148,6 @@ EX_h_e,1000</pre>
       <button class="tab" data-tab="exchanges">Exchange essentiality</button>
       <button class="tab" data-tab="gaps">Network Gaps &amp; Audits</button>
       <button class="tab" data-tab="balance">Reaction Balance</button>
-      <button class="tab" data-tab="balanceaudit">Balance Audit</button>
       <button class="tab" data-tab="precursors">Biomass Precursors</button>
       <button class="tab" data-tab="frog">FROG Report</button>
     </nav>
@@ -175,7 +174,6 @@ EX_h_e,1000</pre>
     <section id="gaps" class="panel"></section>
     <section id="frog" class="panel"></section>
     <section id="balance" class="panel"></section>
-    <section id="balanceaudit" class="panel"></section>
     <section id="precursors" class="panel"></section>
     <section id="annotation" class="panel"></section>
     <section id="compare" class="panel"></section>
@@ -188,8 +186,11 @@ EX_h_e,1000</pre>
 <div id="reportModalRoot"></div>
 
 <script src="/static/vendor/cytoscape.min.js"></script>
+<script src="/static/currency.js?v={{ v }}"></script>
 <script src="/static/app.js?v={{ v }}"></script>
 <script src="/static/genes.js?v={{ v }}"></script>
+<script src="/static/entity_links.js?v={{ v }}"></script>
+<script src="/static/gap_classes.js?v={{ v }}"></script>
 <script src="/static/report_charts.js?v={{ v }}"></script>
 <script src="/static/report_thresholds.js?v={{ v }}"></script>
 <script src="/static/list_export.js?v={{ v }}"></script>

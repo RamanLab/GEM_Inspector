@@ -4,28 +4,28 @@
 
 Curating a genome-scale metabolic model is rarely a straightforward process. Models can contain blocked reactions, dead-end metabolites, unexpected essential nutrients, missing pathways, inconsistent annotations, energy-generating cycles, and other issues that are often difficult to identify and trace back to their source. Debugging these problems can also become repetitive, especially when working with multiple models.
 
-**GEM Inspector is being developed to make this process easier.** It brings together model inspection, diagnostics, comparative analyses, and debugging tools in one place, with a particular focus on helping researchers understand *why* a model behaves the way it does and where curation may be needed.
+**GEM Inspector is being developed to make this process easier.** It brings together model inspection, diagnostics, comparative analyses, and debugging tools in one place, with a particular focus on *why* a model behaves the way it does and where curation may be needed.
 
 The tool is currently a **work in progress**, and we are actively expanding and improving its functionality based on ongoing use and feedback.
 
-> **Current status:** GEM Inspector currently runs locally. You will need to clone this repository and run the application on your own machine (**[Installation & Setup](#installation--setup)**). We are also exploring the possibility of hosting it as an online tool in the future.
+> **Current status:** GEM Inspector currently runs locally. You will need to clone this repository and run the application on your machine - supports windows, linux and mac  (**[Installation & Setup](#installation--setup)**). We are also exploring the possibility of hosting it as an online tool in the future.
 
 ## What can GEM Inspector do currently?
 
-The current version is organized around **four main modules**, covering different aspects of GEM inspection and curation:
+The current version contains **four main modules**, covering different aspects of GEM inspection and curation:
 
 ### 1. Overview
 
-A quick view of the model's overall structure and key properties.
+*Model's overall structure and key properties.*
 
 * Model information and metadata
 * Genes, metabolites, reactions, and compartment statistics
 * Objective function and growth information
 * Reaction and metabolite browsing
-* Exchange reaction overview
+* Exchange reactions overview
 * Diet/media selection
-* MEMOTE quality assessment
-* Minimal medium analysis
+* MEMOTE based quality assessment
+* Minimal medium composition analysis
 
 ### 2. Diagnostics & Comparative Analyses
 

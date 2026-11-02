@@ -42,8 +42,8 @@ A more general, flexible version of the tracing above: pick any starting point (
 
 Three checks aimed at spotting problems or leftover clutter in the model itself, rather than testing specific nutrients:
 
-- **Blocked reactions** — reactions that are simply incapable of ever being used, given the model's current settings — often a sign of a gap or missing connection in the model.
-- **Dead-end molecules** — molecules that can only ever be produced, or only ever be consumed, but never both — a common underlying cause of blocked reactions.
+- **Blocked reactions** — reactions that are simply incapable of ever being used, given the model's current settings. Each one is given a class saying why (caused by a dead end, the medium, a reaction direction, a cofactor, and so on), with a note on what to check. An optional slower test confirms the class with flux calculations.
+- **Dead-end molecules** — molecules that can only ever be produced, or only ever be consumed, but never both. Each is classed as a root gap or as inherited from one, and findings are grouped by root gap, so you can see which few gaps explain most of the blocked reactions. A shared, editable list of common cofactors (ATP, NADH, water…) keeps them from being treated as the cause of a gap.
 - **Demand & sink audit** — a review of a special category of "helper" reactions that modelers sometimes add by hand (distinct from normal nutrient exchanges). This flags ones that appear to be doing nothing, and ones that are quietly propping up the model's growth prediction and may deserve a second look.
 
 All three results can be exported to CSV.

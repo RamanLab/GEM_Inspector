@@ -383,3 +383,23 @@ td.num, th[data-key="lower_bound"], th[data-key="upper_bound"], th[data-key="wt_
 .threshold-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; margin:10px 0 14px; padding:8px 12px; background:#fafcff; border:1px solid var(--line); border-radius:10px; font-size:13px; }
 .threshold-row .th-field { color:var(--muted); }
 .threshold-row input { padding:3px 6px; }
+
+/* Entity links, hover card and reactions popup (entity_links.js) */
+.ent-link, .ent-rxnset { color:var(--accent); cursor:pointer; text-decoration:none; }
+.ent-link:hover, .ent-rxnset:hover { text-decoration:underline; }
+.ent-card { position:absolute; z-index:200; max-width:380px; padding:10px 12px; font-size:12px; line-height:1.45;
+  background:var(--card); color:var(--text); border:1px solid var(--line); border-radius:10px; box-shadow:0 8px 28px rgba(15,23,42,.25); }
+.ent-card.hidden { display:none; }
+.ent-title { font-weight:700; font-size:13px; margin-bottom:2px; }
+.ent-k, .ent-hint { color:var(--muted); }
+.ent-eq { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:11px; word-break:break-word; margin:4px 0; }
+.ent-ids { max-height:140px; overflow:auto; word-break:break-word; }
+.ent-popup { width:min(980px, 100%); }
+.ent-popup .modal-body .table-wrap { max-height:55vh; }
+
+/* Network gap classes (gap_classes.js) */
+.gap-chips { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 12px; }
+.gap-chip { padding:4px 10px; font-size:12px; font-weight:500; background:var(--accent-soft); color:var(--text); border:1px solid var(--line); }
+.gap-chip.active { background:var(--accent); color:#fff; }
+.currency-edit { font-size:12px; padding:6px 10px; }
+.mini-stat-value .unit { font-size:12px; font-weight:500; color:var(--muted); }

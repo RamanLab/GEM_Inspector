@@ -10,7 +10,9 @@ share exactly the same tracing logic without drifting apart.
 """
 from collections import deque
 
-from annotation.naming import clean_metabolite_display_name, compartment_display_name, is_trivial_metabolite
+from annotation.naming import (
+    TRIVIAL_METABOLITES, clean_metabolite_display_name, compartment_display_name, is_trivial_metabolite,
+)
 from core.shared import classify_reactions, clean, safe_float, subsystem_value
 
 
@@ -192,6 +194,7 @@ def debug_exchange_to_biomass(
     reaction_types=None,
     compartment_names=None,
     solution=None,
+    currency=TRIVIAL_METABOLITES,
 ):
     """Trace active-flux pathways from an exchange-derived metabolite toward
     the biomass reaction. Only reactions carrying non-zero flux in the
@@ -229,7 +232,7 @@ def debug_exchange_to_biomass(
     if exclude_trivial_metabolites:
         trivial_ids = {
             met.id for met in model.metabolites
-            if met.id != start_met.id and is_trivial_metabolite(met)
+            if met.id != start_met.id and is_trivial_metabolite(met, currency)
         }
 
     downstream = build_active_flux_downstream_graph(model, active_flux, flux_tolerance, trivial_ids)
@@ -259,6 +262,7 @@ def run_pathway_trace(
     model, solution, start_type, start_id, target_met,
     max_levels, max_paths, exclude_trivial,
     flux_tolerance=1e-9, reaction_types=None, compartment_names=None,
+    currency=TRIVIAL_METABOLITES,
 ):
     """Run one pass of the general pathway trace (resolve the start point,
     build the active-flux graph, BFS to the target, format the paths)
@@ -300,7 +304,7 @@ def run_pathway_trace(
         keep_ids = {target_met.id} | {m.id for m in start_metabolites}
         trivial_ids = {
             met.id for met in model.metabolites
-            if met.id not in keep_ids and is_trivial_metabolite(met)
+            if met.id not in keep_ids and is_trivial_metabolite(met, currency)
         }
 
     downstream = build_active_flux_downstream_graph(model, active_flux, flux_tolerance, trivial_ids)

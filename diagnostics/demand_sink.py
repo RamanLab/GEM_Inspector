@@ -12,6 +12,7 @@ FBA solution at all -- a demand/sink with zero flux AND zero essentiality is
 a reasonable candidate for "is this reaction still needed?"
 """
 from annotation.naming import clean_metabolite_display_name
+from core.knockouts import reaction_knockout
 from core.memo import not_error, remember
 from core.shared import safe_float, subsystem_value, wt_solution as solve_wt
 
@@ -25,11 +26,8 @@ def _compute_demand_sink_audit(model):
     """Audit every demand and sink reaction: metabolite, bounds/
     reversibility, whether it carries flux in the current (fresh) FBA
     solution, and a reaction-knockout essentiality test identical in
-    definition to the one used for exchanges. Uses plain slim_optimize()
-    per reaction (bounds temporarily zeroed and restored, exactly like
-    overview.analysis.stream_ko_analysis) rather than FVA, so it doesn't
-    carry the same repeated-solve numerical risk noted on
-    find_blocked_reactions -- this pattern has not shown that failure mode.
+    definition to the one used for exchanges (core.knockouts, shared with
+    exchange essentiality and the FROG reaction deletions).
     """
     wt_solution = solve_wt(model)
     if wt_solution.status != "optimal":
@@ -46,21 +44,9 @@ def _compute_demand_sink_audit(model):
             ko_growth = None
             ko_status = "not tested"
             if wt_growth > 0:
-                old_lb, old_ub = rxn.lower_bound, rxn.upper_bound
-                try:
-                    rxn.lower_bound = 0
-                    rxn.upper_bound = 0
-                    value = model.slim_optimize(error_value=None)
-                    if value is None:
-                        ko_status = "infeasible"
-                    else:
-                        ko_status = "optimal"
-                        ko_growth = max(0.0, safe_float(value) or 0.0)
-                except Exception as exc:
-                    ko_status = f"error: {exc}"
-                finally:
-                    rxn.lower_bound = old_lb
-                    rxn.upper_bound = old_ub
+                value, ko_status = reaction_knockout(model, rxn)  # shared with FROG and exchange essentiality
+                if value is not None:
+                    ko_growth = max(0.0, value)
 
             ratio = None
             essential = False

@@ -121,7 +121,7 @@ def _single_details(report):
     parts = []
     lists = [
         ("Blocked reactions", ["Reaction", "Name", "Subsystem", "Type"], [[r["id"], r["name"], r["subsystem"] or UNANNOTATED, r["type"]] for r in d.get("blocked", [])]),
-        ("Dead-end metabolites", ["Metabolite", "Name", "Compartment", "Reason"], [[r["id"], r["name"], r["compartment"], r["reason"]] for r in d.get("dead_end", [])]),
+        ("Dead-end metabolites", ["Metabolite", "Name", "Compartment", "Class"], [[r["id"], r["name"], r["compartment"], r["class"]] for r in d.get("dead_end", [])]),
         ("Unbalanced reactions", ["Reaction", "Name", "Status", "Problem"], [[r["id"], r["name"], r["status"], r["problem"]] for r in d.get("unbalanced", [])]),
         ("Exchanges", ["Exchange", "Lower bound", "Upper bound", "WT flux", "Growth kept when closed"],
          [[r["id"], r["lb"], r["ub"], r["wt_flux"], r["retained"]] for r in d.get("exchanges", [])]),

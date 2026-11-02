@@ -47,3 +47,28 @@ def run_with_exact_solver(model, fn):
                 model.solver = original
             except Exception:
                 pass
+
+
+# A target equal to the model's own optimum sits exactly on the solver's
+# feasibility tolerance, so a 100% cutoff can come back "infeasible" through
+# round-off alone. Asking for this fraction less is indistinguishable
+# biologically and removes that failure.
+GROWTH_TOLERANCE = 1e-6
+
+
+def solve_minimal_medium(model, target_growth, minimize_components=False):
+    """cobra.medium.minimal_medium with the robustness fixes in one place.
+
+    - target_growth is relaxed by GROWTH_TOLERANCE (see above).
+    - The LP (minimize total flux) runs on the exact GLPK solver; the MILP
+      (minimize_components=True) runs on the model's own solver, because
+      glpk_exact does not support integer variables and always raised.
+    Returns cobra's Series, or None when infeasible.
+    """
+    from cobra.medium import minimal_medium
+
+    def solve():
+        return minimal_medium(model, target_growth * (1 - GROWTH_TOLERANCE),
+                              minimize_components=minimize_components, open_exchanges=True)
+
+    return solve() if minimize_components else run_with_exact_solver(model, solve)

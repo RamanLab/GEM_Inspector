@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Diagnostics: Balance Audit tab.
+// Diagnostics: the audit section of the Reaction Balance tab.
 // For every unbalanced reaction (and optionally every reaction that can't be
 // checked for lack of formulas): the suggested fix, which metabolites to
 // check, and each metabolite's MetaNetX id and ids in BiGG / VMH / ModelSEED /
@@ -39,7 +39,7 @@ function auditMetaboliteColumns(databases) {
 function renderBalanceAudit() {
   AUDIT_RESULT = null;
   $("balanceaudit").innerHTML = `
-    <h2>Unbalanced reaction audit</h2>
+    <h2>Suggested fixes (audit)</h2>
     <div class="note">
       For each unbalanced reaction this checks the metabolites' original mapping (MetaNetX id and the ids in BiGG, VMH,
       ModelSEED, KEGG and MetaCyc), checks each formula and charge (against the MetaNetX reference when

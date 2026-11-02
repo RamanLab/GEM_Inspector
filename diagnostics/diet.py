@@ -17,11 +17,10 @@ bounds) is left as defined in the uploaded model.
 import csv
 import io
 
-from cobra.medium import minimal_medium
 
 from annotation.naming import metabolite_base_id
 from core.shared import safe_float
-from diagnostics.solver_utils import run_with_exact_solver
+from diagnostics.solver_utils import solve_minimal_medium
 
 
 def build_exchange_index(model):
@@ -148,9 +147,7 @@ def apply_diet_to_model(model, mode, diet_entries=None):
             }
 
         try:
-            medium = run_with_exact_solver(
-                model, lambda: minimal_medium(model, target_growth, minimize_components=False, open_exchanges=True)
-            )
+            medium = solve_minimal_medium(model, target_growth)
         except Exception as exc:
             return {
                 "mode": "minimal", "applied": [], "unmatched": [],

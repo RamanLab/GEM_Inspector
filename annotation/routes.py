@@ -7,6 +7,7 @@ from pathlib import Path
 from flask import Blueprint, Response, jsonify, request
 
 from annotation.metanetx_translation import TARGETS, translate_via_metanetx
+from annotation.naming import TRIVIAL_METABOLITES
 from annotation.seed_to_vmh import translate_seed_to_vmh
 from annotation.translation_export import build_bundle, model_bytes, report_summary_text
 from core.shared import EXPIRY_HOOKS, MODEL_CACHE, ORIGINAL_FILES, load_uploaded_model, touch_model_cache
@@ -20,6 +21,12 @@ TRANSLATIONS = {}
 MNX_TRANSLATIONS = {}  # same, for the translations through MetaNetX
 EXPIRY_HOOKS.append(lambda model_id: TRANSLATIONS.pop(model_id, None))
 EXPIRY_HOOKS.append(lambda model_id: MNX_TRANSLATIONS.pop(model_id, None))
+
+
+@annotation_bp.get("/api/currency-defaults")
+def api_currency_defaults():
+    """The built-in currency/cofactor list that the editable list starts from."""
+    return jsonify({"currency_metabolites": sorted(TRIVIAL_METABOLITES)})
 
 
 def _fresh_source_model(model_id):

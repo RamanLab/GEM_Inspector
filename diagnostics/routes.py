@@ -12,7 +12,7 @@ from diagnostics.biomass_precursors import compute_biomass_precursor_report
 from diagnostics.demand_sink import compute_demand_sink_audit
 from diagnostics.frog import stream_frog_report
 from diagnostics.minimal_medium import compute_minimal_medium_report
-from diagnostics.network_gaps import compute_network_gaps_report
+from diagnostics.network_gaps import compute_blocked_report, compute_dead_end_report, compute_network_gaps_report
 
 diagnostics_bp = Blueprint("diagnostics", __name__)
 
@@ -53,31 +53,47 @@ def api_minimal_medium():
     return jsonify({"status": "success", **report})
 
 
-@diagnostics_bp.post("/api/network-gaps")
-def api_network_gaps():
-    """On-request report for the Network Gaps tab: reactions that can't
-    carry any flux under the model's current bounds, plus structurally
-    dead-end metabolites. Independent of every other tab; never changes
-    the cached model (see compute_network_gaps_report)."""
-    data = request.json
-    if not data:
-        return jsonify({"error": "No data provided"}), 400
-
-    model_id = data.get("model_id")
+def _cached_model(data):
+    """(model, None) for the request's model id, or (None, error response)."""
+    model_id = (data or {}).get("model_id")
     if not model_id or model_id not in MODEL_CACHE:
-        return jsonify({"error": "Model not found or expired. Please re-run the initial analysis."}), 404
-
+        return None, (jsonify({"error": "Model not found or expired. Please re-run the initial analysis."}), 404)
     touch_model_cache(model_id)
-    model, _ = MODEL_CACHE[model_id]
+    return MODEL_CACHE[model_id][0], None
 
+
+def _report_response(compute):
+    """Run a report function and turn its result (or error) into a JSON response."""
     try:
-        report = compute_network_gaps_report(model)
+        report = compute()
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
-
     if "error" in report:
         return jsonify({"status": "error", **report}), 400
     return jsonify({"status": "success", **report})
+
+
+@diagnostics_bp.post("/api/dead-end-metabolites")
+def api_dead_end_metabolites():
+    """Network Gaps step 1: dead-end metabolites by GapFind. Needs no other analysis."""
+    model, error = _cached_model(request.json)
+    return error or _report_response(lambda: compute_dead_end_report(model))
+
+
+@diagnostics_bp.post("/api/blocked-reactions")
+def api_blocked_reactions():
+    """Network Gaps step 2: FVA-blocked reactions, split into dead-end-linked
+    and not. Needs no other analysis (it computes the dead ends it links to
+    when they are not there yet)."""
+    model, error = _cached_model(request.json)
+    return error or _report_response(lambda: compute_blocked_report(model))
+
+
+@diagnostics_bp.post("/api/network-gaps")
+def api_network_gaps():
+    """Both Network Gaps steps in one response (used by the report)."""
+    model, error = _cached_model(request.json)
+    return error or _report_response(lambda: compute_network_gaps_report(model))
 
 
 @diagnostics_bp.post("/api/demand-sink-audit")

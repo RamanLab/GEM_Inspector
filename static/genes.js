@@ -53,7 +53,7 @@ function renderGenes() {
     const q = $("geneSearch").value.toLowerCase();
     const f = $("geneFilter").value;
     const rows = filtered ? filtered : genes.filter(g =>
-      (!q || `${g.id} ${g.name} ${g.reactions.join(" ")} ${g.subsystems.join(" ")}`.toLowerCase().includes(q)) &&
+      searchMatches(q, g.id, `${g.id} ${g.name} ${g.reactions.join(" ")} ${g.subsystems.join(" ")}`) &&
       (!f || (f === "lost" ? g.lost_count > 0 : f === "active" ? g.active_count > 0 : !g.functional)));
     geneCurrentRows = rows;
     $("geneCount").textContent = `${rows.length} / ${genes.length}`;
@@ -62,8 +62,8 @@ function renderGenes() {
       <td><strong>${escapeHtml(g.id)}</strong></td>
       <td>${escapeHtml(g.name || "—")}</td>
       <td class="num">${g.reaction_count}</td>
-      <td>${cell(g.reactions)}</td>
-      <td>${g.lost_count ? `<div class="gene-list">${g.lost_on_ko.map(escapeHtml).join(", ")}</div>` : "—"}</td>
+      <td>${entityLinkList("rxn", g.reactions)}</td>
+      <td>${entityLinkList("rxn", g.lost_on_ko)}</td>
       <td class="num">${g.active_count}</td>
       <td>${cell(g.subsystems)}</td>
       <td>${g.functional ? "Yes" : "No"}</td>

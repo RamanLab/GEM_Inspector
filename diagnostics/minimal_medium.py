@@ -8,13 +8,11 @@ bounds. Shares the same underlying cobra.medium.minimal_medium call and the
 same "target is the model's own growth, not an artificially opened one" fix
 as diet.py.
 """
-from cobra.medium import minimal_medium
-
 from annotation.naming import clean_metabolite_display_name
 from annotation.namespace_mapping import detect_metabolite_namespace_and_map, detect_reaction_namespace_and_map
 from core.memo import not_error, remember
 from core.shared import safe_float
-from diagnostics.solver_utils import run_with_exact_solver
+from diagnostics.solver_utils import solve_minimal_medium
 
 
 def compute_minimal_medium_report(model, growth_cutoff_fraction=1.0, minimize_components=False):
@@ -60,10 +58,7 @@ def _compute_minimal_medium_report(model, growth_cutoff_fraction=1.0, minimize_c
     target_growth = wt_growth * growth_cutoff_fraction
 
     try:
-        medium = run_with_exact_solver(
-            model,
-            lambda: minimal_medium(model, target_growth, minimize_components=minimize_components, open_exchanges=True),
-        )
+        medium = solve_minimal_medium(model, target_growth, minimize_components)
     except Exception as exc:
         return {"error": f"Could not compute a minimal medium: {exc}", "wt_growth": wt_growth}
     if medium is None:

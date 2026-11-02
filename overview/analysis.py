@@ -18,6 +18,7 @@ from annotation.namespace_mapping import (
     detect_metabolite_namespace_and_map,
     detect_reaction_namespace_and_map,
 )
+from core.knockouts import reaction_knockout
 from core.memo import recall, store_value
 from core.shared import classify_reactions, clean, safe_float, subsystem_value, wt_solution as solve_wt
 from diagnostics.balance import analyse_all_reactions, short_text as balance_short_text
@@ -271,6 +272,7 @@ def quick_analyze(model):
             "reversible": bool(rxn.lower_bound < 0 and rxn.upper_bound > 0),
             "wt_flux": flux,
             "gene_reaction_rule": getattr(rxn, "gene_reaction_rule", ""),
+            "equation": rxn.build_reaction_string(),
         })
 
     # Metabolite table
@@ -288,6 +290,7 @@ def quick_analyze(model):
             "produced_count": m_stats["produced_count"],
             "consumed_count": m_stats["consumed_count"],
             "reversible_count": m_stats["reversible_count"],
+            "reactions": sorted(r.id for r in met.reactions),
         })
 
     return {
@@ -322,29 +325,9 @@ def stream_ko_analysis(model, wt_growth, fluxes):
         ko_growth = None
         ko_status = "not tested"
         if wt_growth > 0:
-            # Temporary bounds instead of copying the model, for speed.
-            old_lb = rxn.lower_bound
-            old_ub = rxn.upper_bound
-            try:
-                rxn.lower_bound = 0
-                rxn.upper_bound = 0
-
-                # slim_optimize() skips building a full Solution object
-                # (fluxes/reduced costs/shadow prices for every reaction)
-                # and just returns the objective value, which is all a
-                # knockout screen needs -- avoids thousands of unnecessary
-                # Solution constructions for a model with many exchanges.
-                value = model.slim_optimize(error_value=None)
-                if value is None:
-                    ko_status = "infeasible"
-                else:
-                    ko_status = "optimal"
-                    ko_growth = max(0.0, safe_float(value) or 0.0)
-            except Exception as exc:
-                ko_status = f"error: {exc}"
-            finally:
-                rxn.lower_bound = old_lb
-                rxn.upper_bound = old_ub
+            value, ko_status = reaction_knockout(model, rxn)  # shared with FROG and the demand/sink audit
+            if value is not None:
+                ko_growth = max(0.0, value)
 
         ratio = None
         essential = False

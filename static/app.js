@@ -543,14 +543,14 @@ function renderAll() {
   renderBalance();
   renderPrecursors();
   renderModelCompare();
-  renderTranslate(); renderMetanetxTranslate(); renderBalanceAudit(); renderGenes(); renderThresholdRows();
+  renderTranslate(); renderMetanetxTranslate(); renderGenes(); renderThresholdRows();
 }
 
 function renderSummary() {
   const s = DATA.stats;
   const cards = [
     ["Genes", s.genes], ["Metabolites", s.metabolites], ["Reactions", s.reactions],
-    ["Compartments", s.compartments], ["WT growth", fmt(s.wt_growth)], ["Solver", s.solver]
+    ["Compartments", s.compartments], ["WT growth", `${fmt(s.wt_growth)} h⁻¹`], ["Solver", s.solver]
   ];
   $("summary").innerHTML = cards.map(([l,v]) =>
     `<div class="summary-card"><div class="label">${escapeHtml(l)}</div><div class="value">${escapeHtml(v)}</div></div>`
@@ -644,7 +644,7 @@ function renderOverview() {
       <div class="mini-stat"><div class="mini-stat-value">${escapeHtml(s.reactions)}</div><div class="mini-stat-label">Reactions</div></div>
       <div class="mini-stat"><div class="mini-stat-value">${escapeHtml(s.genes)}</div><div class="mini-stat-label">Genes</div></div>
       <div class="mini-stat" title="Genes : reactions, i.e. one gene maps to roughly this many reactions on average."><div class="mini-stat-value">${escapeHtml(grLabel)}</div><div class="mini-stat-label">Gene : Reaction ratio</div></div>
-      <div class="mini-stat"><div class="mini-stat-value">${fmt(s.wt_growth)}</div><div class="mini-stat-label">WT growth</div></div>
+      <div class="mini-stat"><div class="mini-stat-value">${fmt(s.wt_growth)} <span class="unit">h⁻¹</span></div><div class="mini-stat-label">WT growth (per hour)</div></div>
       <div class="mini-stat"><div class="mini-stat-value">${escapeHtml(s.solver)}</div><div class="mini-stat-label">Solver</div></div>
     </div>
 
@@ -737,6 +737,7 @@ const REACTION_TABLE_COLUMNS = [
   { key: "id", label: "Original ID" },
   { key: "metanetx_id", label: "MetaNetX ID" },
   { key: "name", label: "Name" },
+  { key: "equation", label: "Reaction formula" },
   { key: "type", label: "Type" },
   { key: "subsystem", label: "Subsystem" },
   { key: "gene_reaction_rule", label: "GPR" },
@@ -770,7 +771,7 @@ function renderReactions() {
     ${reactionStatsHtml(DATA.reactions)}
     <h3>Reactions</h3>
     <div class="toolbar">
-      <input id="rxnSearch" type="text" placeholder="Search ID, name, subsystem…">
+      <input id="rxnSearch" type="text" placeholder="Search ID, name, formula, subsystem…">
       <select id="rxnType"><option value="">All types</option>${types.map(t => `<option>${escapeHtml(t)}</option>`).join("")}</select>
       <select id="rxnSubsystem"><option value="">All subsystems</option>${subsystems(DATA.reactions).map(t => `<option>${escapeHtml(t)}</option>`).join("")}</select>
       <select id="rxnMapped">
@@ -802,6 +803,7 @@ function renderReactions() {
         <th data-key="id">Original ID</th>
         <th data-key="metanetx_id">MetaNetX ID</th>
         <th data-key="name">Name</th>
+        <th data-key="equation">Reaction formula</th>
         <th data-key="type">Type</th>
         <th data-key="subsystem">Subsystem</th>
         <th data-key="gene_reaction_rule">GPR</th>
@@ -821,7 +823,7 @@ function renderReactions() {
     const comp = $("rxnComp").value;
     const bal = $("rxnBalance").value;
     const rows = filtered ? filtered : DATA.reactions.filter(r =>
-      (!q || `${r.id} ${r.metanetx_id || ""} ${r.name} ${r.subsystem} ${r.gene_reaction_rule}`.toLowerCase().includes(q)) &&
+      searchMatches(q, r.id, `${r.id} ${r.metanetx_id || ""} ${r.name} ${r.equation || ""} ${r.subsystem} ${r.gene_reaction_rule}`) &&
       (!type || r.type === type) && (!sub || r.subsystem === sub) &&
       (!mapped || (mapped === "mapped" ? !!r.metanetx_id : !r.metanetx_id)) &&
       (!gpr || (gpr === "has" ? !!(r.gene_reaction_rule || "").trim() : !(r.gene_reaction_rule || "").trim())) &&
@@ -843,8 +845,9 @@ function renderReactions() {
       <td><strong>${escapeHtml(r.id)}</strong></td>
       <td>${escapeHtml(r.metanetx_id || "—")}</td>
       <td class="wrap">${escapeHtml(r.name)}</td>
+      <td class="wrap ent-eq">${escapeHtml(r.equation || "—")}</td>
       <td>${reactionTypeBadge(r.type)}</td><td>${escapeHtml(r.subsystem || "—")}</td>
-      <td class="wrap">${escapeHtml(r.gene_reaction_rule || "—")}</td>
+      <td class="wrap">${gprHtml(r.gene_reaction_rule)}</td>
       <td>${compartmentBadges(r.compartments)}</td>
       <td class="num">${fmt(r.wt_flux)}</td>
       <td>${balanceBadge(r)}</td>
@@ -868,6 +871,7 @@ const METABOLITE_TABLE_COLUMNS = [
   { key: "produced_count", label: "# Produced in" },
   { key: "consumed_count", label: "# Consumed in" },
   { key: "reversible_count", label: "# Reversible" },
+  { key: "reactions", label: "Reactions", value: m => (m.reactions || []).join("; ") },
 ];
 
 let metCurrentRows = [];
@@ -897,6 +901,7 @@ function renderMetabolites() {
         <th data-key="produced_count"># Produced in</th>
         <th data-key="consumed_count"># Consumed in</th>
         <th data-key="reversible_count"># Reversible</th>
+        <th>Reactions</th>
       </tr></thead>
       <tbody id="metBody"></tbody>
     </table></div>
@@ -906,7 +911,7 @@ function renderMetabolites() {
     const comp = $("metComp").value;
     const mapped = $("metMapped").value;
     const rows = filtered ? filtered : DATA.metabolites.filter(m =>
-      (!q || `${m.id} ${m.metanetx_id || ""} ${m.name} ${m.formula}`.toLowerCase().includes(q)) &&
+      searchMatches(q, m.id, `${m.id} ${m.metanetx_id || ""} ${m.name} ${m.formula}`) &&
       (!comp || m.compartment === comp) &&
       (!mapped || (mapped === "mapped" ? !!m.metanetx_id : !m.metanetx_id))
     );
@@ -922,6 +927,7 @@ function renderMetabolites() {
       <td class="num">${m.produced_count ?? 0}</td>
       <td class="num">${m.consumed_count ?? 0}</td>
       <td class="num">${m.reversible_count ?? 0}</td>
+      <td>${metReactionLinks(m)}</td>
     </tr>`).join("");
   };
   ["metSearch","metComp","metMapped"].forEach(id => $(id).addEventListener("input", () => redraw()));
@@ -1212,7 +1218,7 @@ function renderObjective() {
     objCurrentRows = rows;
 
     $("objBody").innerHTML = rows.length > 0 ? rows.map(o => `<tr>
-      <td><strong><a href="#met-${escapeHtml(o.metabolite_id)}" style="cursor:pointer;color:inherit;text-decoration:underline;">${escapeHtml(o.metabolite_id)}</a></strong></td>
+      <td><strong>${entityLink("met", o.metabolite_id)}</strong></td>
       <td>${escapeHtml(o.metabolite_metanetx_id || "—")}</td>
       <td class="col-name-md" title="${escapeHtml(o.metabolite_name || "")}">${escapeHtml(o.metabolite_name || "—")}</td>
       <td>${compartmentBadges([o.compartment])}</td>
@@ -1220,7 +1226,7 @@ function renderObjective() {
       <td>${biomassRoleBadge(o.biomass_role)}</td>
       <td>${o.direct_exchange ? `<strong>${escapeHtml(o.direct_exchange)}</strong>` : "—"}</td>
       <!-- <td class="num">${o.appears_in_reactions}</td> -->
-      <td class="num">${o.reaction_count ?? 0}</td>
+      <td class="num">${metReactionsLink(o.metabolite_id, o.reaction_count ?? 0)}</td>
       <td class="num">${o.produced_count ?? 0}</td>
       <td class="num">${o.consumed_count ?? 0}</td>
       <td class="num">${o.reversible_count ?? 0}</td>
@@ -1398,17 +1404,15 @@ function renderMinimalMediumTable(components) {
 }
 
 // ---------------------------------------------------------------------------
-// Network Gaps tab (on-request, as soon as the model loads).
-//
-// Two complementary diagnostics under the model's current bounds (whatever
-// diet was applied at upload): reactions that can't carry any flux at all
-// ("blocked"), and metabolites that structurally can only ever be produced
-// or only ever be consumed ("dead ends") -- often *why* a reaction ends up
-// blocked, though not the only possible reason, which is why both are shown
-// together. Both tables export to CSV independently.
+// Network Gaps tab (on request). Two steps, shown as they finish:
+//   1. dead-end metabolites (GapFind), each as root / downstream no-production
+//      or root / upstream no-consumption;
+//   2. blocked reactions (flux variability), split into dead-end-linked and
+//      not dead-end-linked.
+// Class chips (gap_classes.js) filter the tables, which export to CSV on their own.
 // ---------------------------------------------------------------------------
 
-let NETGAPS_RESULT = null;
+let NETGAPS_RESULT = null;   // both steps, set once the second one is done
 
 const NETGAPS_BLOCKED_CSV_COLUMNS = [
   { key: "id", label: "Original ID" },
@@ -1420,44 +1424,39 @@ const NETGAPS_BLOCKED_CSV_COLUMNS = [
   { key: "lower_bound", label: "LB" },
   { key: "upper_bound", label: "UB" },
   { key: "gene_reaction_rule", label: "GPR" },
+  { key: "class_label", label: "Class" },
+  { key: "dead_end_metabolites", label: "Linked dead-end metabolites", value: r => join(r.dead_end_metabolites) },
   { key: "reaction_string", label: "Reaction" },
 ];
+// The table shows every column but the last, which is offered only in the Export panel.
+const NETGAPS_BLOCKED_TABLE_COLUMNS = NETGAPS_BLOCKED_CSV_COLUMNS.slice(0, -1);
 const NETGAPS_DEADEND_CSV_COLUMNS = [
   { key: "id", label: "Metabolite Original ID" },
   { key: "metanetx_id", label: "Metabolite MetaNetX ID" },
   { key: "name", label: "Metabolite name" },
   { key: "compartment", label: "Compartment" },
-  { key: "reason", label: "Reason" },
+  { key: "class_label", label: "Class" },
   { key: "reactions", value: r => join(r.reactions), label: "Reactions involved" },
 ];
-// Positional subset of NETGAPS_BLOCKED_CSV_COLUMNS matching the Blocked
-// reactions table's actual <th> order (that constant has one extra field,
-// reaction_string, offered only in the Export panel via exportColumns, not
-// shown as its own table column).
-const NETGAPS_BLOCKED_TABLE_COLUMNS = NETGAPS_BLOCKED_CSV_COLUMNS.slice(0, 9);
 
-const NETGAPS_REASON_LABELS = {
-  no_consuming_reaction: "Never consumed (only ever produced)",
-  no_producing_reaction: "Never produced (only ever consumed)",
-  fully_blocked: "Fully blocked (bounds allow neither direction)",
-  no_reactions: "No reactions at all",
-};
+let gapsDeadData = null, gapsBlockedData = null;   // the two steps' results
+let gapsBlockedCurrentRows = [];
+let gapsDeadendCurrentRows = [];
 
 function renderNetworkGaps() {
+  gapsDeadData = gapsBlockedData = null;
   $("gaps").innerHTML = `
-    <h2>Blocked reactions &amp; dead-end metabolites</h2>
+    <h2>Dead-end metabolites &amp; blocked reactions</h2>
     <div class="note">
-      Two independent structural diagnostics: reactions that can't carry any flux at all under the model's
-      current bounds (via COBRApy's flux-variability-based <code>find_blocked_reactions</code>), and metabolites
-      that can only ever be produced or only ever be consumed given their reactions' bounds/reversibility alone
-      ("dead ends", judged purely by stoichiometry and directionality — not informed by the blocked-reaction
-      results). Any metabolite that participates in a transport reaction is excluded from the dead-end list,
-      since a transporter can supply or drain that exact species from another compartment even when it looks
-      locally dead-ended. Neither diagnostic ever changes the analyzed model.
-      <strong>Blocked reactions are relative to the medium/diet currently applied to this model</strong> —
-      switching to a different diet (or editing exchange bounds) can unblock a reaction shown here, or block one
-      that isn't. Blocked-reaction detection can take a while for large models (it runs flux variability analysis
-      on every reaction that carries no flux in the current solution).
+      Two steps, each shown as soon as it finishes. <strong>1. Dead-end metabolites</strong> are found with GapFind
+      (Kumar et al. 2007), with all exchange reactions opened so that the gaps are those of the network itself:
+      <em>root no-production</em> (no reaction can make it), <em>downstream no-production</em> (its producers need a
+      metabolite that cannot be made), <em>root no-consumption</em> (no reaction can use it) and <em>upstream
+      no-consumption</em> (its consumers lead only to one that cannot be used).
+      <strong>2. Blocked reactions</strong> are those that carry no flux in a flux variability analysis, split into
+      <em>dead-end-linked</em> (the reaction involves a dead-end metabolite) and <em>not dead-end-linked</em>.
+      Blocked reactions are relative to the medium currently applied; the FVA can take a while for large models.
+      Nothing here changes the model.
     </div>
     <div class="toolbar">
       <button id="gapsRunBtn" type="button">Compute network gaps</button>
@@ -1488,60 +1487,65 @@ function renderNetworkGaps() {
   $("dsAuditRunBtn").addEventListener("click", runDemandSinkAudit);
 }
 
+async function postForGaps(url) {
+  const res = await fetch(url, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model_id: MODEL_ID }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || "Network gaps computation failed");
+  return data;
+}
+
 async function runNetworkGaps() {
   if (!MODEL_ID) {
     $("gapsStatus").innerHTML = `<span class="error">Model session expired — please re-run the initial analysis.</span>`;
     return;
   }
-
   const btn = $("gapsRunBtn");
   btn.disabled = true;
-  $("gapsStatus").textContent = "Computing blocked reactions and dead-end metabolites…";
   progressStart("gapsProgress");
-  $("gapsResults").innerHTML = "";
+  gapsDeadData = gapsBlockedData = NETGAPS_RESULT = null;
   $("gapsCount").textContent = "";
-
+  $("gapsResults").innerHTML = `
+    <h3>Dead-end metabolites</h3><div id="gapsDeadChips"></div><div id="gapsDeadendWrap"></div>
+    <h3>Blocked reactions</h3><div id="gapsBlockedChips"></div><div id="gapsBlockedWrap"></div>`;
   try {
-    const res = await fetch("/api/network-gaps", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model_id: MODEL_ID }),
-    });
-    const data = await res.json();
-    if (!res.ok || data.error) throw new Error(data.error || "Network gaps computation failed");
+    $("gapsStatus").textContent = "Step 1 of 2: finding dead-end metabolites (GapFind)…";
+    gapsDeadData = await postForGaps("/api/dead-end-metabolites");
+    gapsFilter.dead = gapsFilter.blocked = null;
+    $("gapsCount").textContent = `${gapsDeadData.dead_end_metabolites.length} dead-end metabolite(s)`;
+    drawGapTables();
 
-    NETGAPS_RESULT = data;
-    $("gapsStatus").textContent = data.note || "";
-    progressDone("gapsProgress");
-    $("gapsCount").textContent =
-      `${data.blocked_reactions.length} blocked reaction(s) · ${data.dead_end_metabolites.length} dead-end metabolite(s)`;
-    renderNetworkGapsResults(data);
+    $("gapsStatus").textContent = "Step 2 of 2: finding blocked reactions (flux variability analysis)…";
+    $("gapsBlockedWrap").innerHTML = `<div class="note">Running…</div>`;
+    gapsBlockedData = await postForGaps("/api/blocked-reactions");
+    NETGAPS_RESULT = { ...gapsDeadData, ...gapsBlockedData, note: `${gapsDeadData.note} ${gapsBlockedData.note}` };
+    $("gapsStatus").textContent = NETGAPS_RESULT.note;
+    $("gapsCount").textContent += ` · ${gapsBlockedData.blocked_reactions.length} blocked reaction(s)`;
+    drawGapTables();
+    if (typeof updateThresholdVerdicts === "function") setTimeout(updateThresholdVerdicts, 0);
   } catch (err) {
-    NETGAPS_RESULT = null;
     $("gapsStatus").innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
-    progressDone("gapsProgress");
-    $("gapsResults").innerHTML = "";
   } finally {
+    progressDone("gapsProgress");
     btn.disabled = false;
   }
 }
 
-function renderNetworkGapsResults(data) {
-  if (typeof updateThresholdVerdicts === "function") setTimeout(updateThresholdVerdicts, 0);
-  $("gapsResults").innerHTML = `
-    <h3>Blocked reactions</h3>
-    <div id="gapsBlockedWrap"></div>
-    <h3>Dead-end metabolites</h3>
-    <div id="gapsDeadendWrap"></div>
-  `;
-  renderBlockedReactionsTable(data.blocked_reactions || []);
-  setTimeout(() => makeSortable("gapsBlockedTable", data.blocked_reactions || [], renderBlockedReactionsTable), 0);
-  renderDeadEndTable(data.dead_end_metabolites || []);
-  setTimeout(() => makeSortable("gapsDeadendTable", data.dead_end_metabolites || [], renderDeadEndTable), 0);
+// (Re)draws chips and tables for whichever steps have finished, from the class filters.
+function drawGapTables() {
+  drawGapChips();
+  if (gapsDeadData) {
+    const dead = gapRows("dead");
+    renderDeadEndTable(dead);
+    setTimeout(() => makeSortable("gapsDeadendTable", dead, renderDeadEndTable), 0);
+  }
+  if (gapsBlockedData) {
+    const blocked = gapRows("blocked");
+    renderBlockedReactionsTable(blocked);
+    setTimeout(() => makeSortable("gapsBlockedTable", blocked, renderBlockedReactionsTable), 0);
+  }
 }
-
-let gapsBlockedCurrentRows = [];
-let gapsDeadendCurrentRows = [];
 
 function renderBlockedReactionsTable(rows) {
   gapsBlockedCurrentRows = rows;
@@ -1563,9 +1567,11 @@ function renderBlockedReactionsTable(rows) {
         <th data-key="lower_bound">LB</th>
         <th data-key="upper_bound">UB</th>
         <th data-key="gene_reaction_rule">GPR</th>
+        <th data-key="class_label">Class</th>
+        <th>Linked dead-end metabolites</th>
       </tr></thead>
       <tbody>${rows.map(r => `<tr class="${r.metanetx_id ? "" : "row-unmapped"}">
-        <td><strong>${escapeHtml(r.id)}</strong></td>
+        <td><strong>${entityLink("rxn", r.id)}</strong></td>
         <td>${escapeHtml(r.metanetx_id || "—")}</td>
         <td class="wrap">${escapeHtml(r.name || "—")}</td>
         <td>${escapeHtml(r.subsystem || "—")}</td>
@@ -1573,7 +1579,9 @@ function renderBlockedReactionsTable(rows) {
         <td>${compartmentBadges(r.compartments)}</td>
         <td class="num">${fmt(r.lower_bound, 2)}</td>
         <td class="num">${fmt(r.upper_bound, 2)}</td>
-        <td class="wrap">${escapeHtml(r.gene_reaction_rule || "—")}</td>
+        <td class="wrap">${gprHtml(r.gene_reaction_rule)}</td>
+        <td>${gapClassBadge(r.class, r.class_label)}</td>
+        <td class="wrap">${entityLinkList("met", r.dead_end_metabolites)}</td>
       </tr>`).join("")}</tbody>
     </table></div>
   `;
@@ -1595,16 +1603,16 @@ function renderDeadEndTable(rows) {
         <th data-key="metanetx_id">Metabolite MetaNetX ID</th>
         <th data-key="name">Metabolite name</th>
         <th data-key="compartment">Compartment</th>
-        <th data-key="reason">Reason</th>
+        <th data-key="class_label">Class</th>
         <th data-key="reactions">Reactions involved</th>
       </tr></thead>
       <tbody>${rows.map(r => `<tr>
-        <td><strong>${escapeHtml(r.id)}</strong></td>
+        <td><strong>${entityLink("met", r.id)}</strong></td>
         <td>${escapeHtml(r.metanetx_id || "—")}</td>
         <td>${escapeHtml(r.name || "—")}</td>
         <td>${compartmentBadges([r.compartment])}</td>
-        <td>${escapeHtml(NETGAPS_REASON_LABELS[r.reason] || r.reason)}</td>
-        <td class="wrap">${escapeHtml(join(r.reactions))}</td>
+        <td>${r.classes.map(c => gapClassBadge(c, gapsDeadData.class_labels[c])).join(" ")}</td>
+        <td class="wrap">${entityLinkList("rxn", r.reactions)}</td>
       </tr>`).join("")}</tbody>
     </table></div>
   `;
@@ -1771,6 +1779,7 @@ function renderDebugSelection(essentialExchanges) {
         <input type="checkbox" id="debugHideTrivial" checked>
         Hide common cofactors (H, H2O, ATP/ADP, NAD(H), Pi…)
       </label>
+      ${currencyEditButton()}
       <button id="debugRunBtn" type="button" style="margin-left:auto;">Run debugging analysis</button>
     </div>
     <div class="debug-select-list">${rows || '<div class="note">No essential exchanges to debug.</div>'}</div>
@@ -1823,6 +1832,7 @@ async function runDebugAnalysis(exchangeIds, hideTrivial) {
         model_id: MODEL_ID,
         exchange_ids: exchangeIds,
         exclude_trivial_metabolites: hideTrivial,
+        currency_metabolites: currencyPayload(),
       }),
     });
     const data = await res.json();
@@ -1960,6 +1970,7 @@ function renderTracer() {
           <input type="checkbox" id="tracerHideTrivial" checked>
           Hide common cofactors
         </label>
+        ${currencyEditButton()}
       </div>
       <div class="tracer-field">
         <label>View as</label>
@@ -2038,6 +2049,7 @@ async function runPathwayTrace() {
         max_levels: maxLevels,
         max_paths: maxPaths,
         exclude_trivial_metabolites: hideTrivial,
+        currency_metabolites: currencyPayload(),
         knockouts,
       }),
     });
@@ -3305,7 +3317,8 @@ function reportNetworkGapsSectionHtml(data) {
       { label: "can carry flux", value: Math.max(0, DATA.stats.reactions - (data.blocked_reactions || []).length), color: "var(--s1)" },
     ], { title: "Reactions that can carry flux" })}
     ${rcBars(rcCountBy(data.blocked_reactions || [], r => r.subsystem, 12), { title: "Blocked reactions per subsystem (top 12)" })}
-    ${rcBars(rcCountBy(data.dead_end_metabolites || [], d => NETGAPS_REASON_LABELS[d.reason] || d.reason, 6), { title: "Dead-end metabolites by reason" })}
+    ${rcBars(rcCountBy(data.blocked_reactions || [], r => r.class_label, 12), { title: "Blocked reactions: linked to a dead end or not" })}
+    ${rcBars(rcCountBy(data.dead_end_metabolites || [], d => d.class_label, 12), { title: "Dead-end metabolites by class" })}
     <h3>Blocked reactions</h3>
     ${staticTableHtml(NETGAPS_BLOCKED_CSV_COLUMNS, data.blocked_reactions || [], { emptyMessage: "No blocked reactions." })}
     <h3>Dead-end metabolites</h3>
@@ -3498,7 +3511,7 @@ async function runGenerateReport(getPath) {
     const s = DATA.stats || {};
     const coverStats = [
       ["Genes", s.genes], ["Metabolites", s.metabolites], ["Reactions", s.reactions],
-      ["Compartments", s.compartments], ["WT growth", fmt(DATA.wt_growth)],
+      ["Compartments", s.compartments], ["WT growth", `${fmt(DATA.wt_growth)} h⁻¹`],
       ["Gene : Reaction ratio", s.reaction_gene_ratio != null ? `1 : ${fmt(s.reaction_gene_ratio, 2)}` : "—"],
     ];
     const body = `
@@ -3817,7 +3830,7 @@ function renderBalance() {
       A reaction is <strong>balanced</strong> when every element (and the net charge) adds up to the same on both sides.
       This tab lists reactions that are <strong>unbalanced</strong> (and by how much of which element) and those that
       <strong>can't be checked</strong> because a metabolite has no chemical formula. Exchange/demand/sink and biomass
-      reactions are skipped. Nothing is changed in the model.
+      reactions are skipped. Below the list, the audit suggests a fix for each one. Nothing is changed in the model.
     </div>
     <div class="toolbar">
       <button id="balRunBtn" type="button">Check reaction balance</button>
@@ -3831,7 +3844,9 @@ function renderBalance() {
     </div>
     <div id="balStatus" class="debug-status"></div>
     <div id="balResults"></div>
+    <div id="balanceaudit"></div>
   `;
+  renderBalanceAudit();
   $("balRunBtn").addEventListener("click", () => runBalance());
   $("balFilter").addEventListener("input", () => { BALANCE_FILTER = $("balFilter").value; drawBalance(); });
   $("balSearch").addEventListener("input", drawBalance);

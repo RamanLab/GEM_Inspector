@@ -7,7 +7,7 @@ from pathlib import Path
 from flask import Blueprint, Response, jsonify, request
 from werkzeug.utils import secure_filename
 
-from annotation.naming import clean_metabolite_display_name, compartment_display_name
+from annotation.naming import clean_metabolite_display_name, compartment_display_name, currency_bases
 from core.shared import (
     ALLOWED,
     EXPIRY_HOOKS,
@@ -50,6 +50,7 @@ def api_debug_exchanges():
     model_id = data.get("model_id")
     exchange_ids = data.get("exchange_ids", [])
     exclude_trivial = bool(data.get("exclude_trivial_metabolites", True))
+    currency = currency_bases(data.get("currency_metabolites"))
 
     if not model_id or model_id not in MODEL_CACHE:
         return jsonify({"error": "Model not found or expired. Please re-run the initial analysis."}), 404
@@ -96,6 +97,7 @@ def api_debug_exchanges():
                     max_flux_paths=5, max_flux_path_depth=15,
                     exclude_trivial_metabolites=exclude_trivial,
                     reaction_types=reaction_types, compartment_names=compartment_names,
+                    currency=currency,
                 )
 
                 # After KO: knock the exchange out inside a model context so
@@ -109,6 +111,7 @@ def api_debug_exchanges():
                         max_flux_paths=5, max_flux_path_depth=15,
                         exclude_trivial_metabolites=exclude_trivial,
                         reaction_types=reaction_types, compartment_names=compartment_names,
+                        currency=currency,
                     )
 
                 ko_growth = 0.0
@@ -138,10 +141,9 @@ def api_debug_exchanges():
             "results": results,
             "excluded_trivial_metabolites": exclude_trivial,
             "trivial_metabolite_rule": (
-                "Currency/cofactor metabolites (H+, water, ATP/ADP/AMP and other "
-                "nucleotides, NAD(H)/NADP(H), FAD(H2), CoA, phosphate/diphosphate, "
-                "quinones) are excluded from traced paths so they don't obscure the "
-                "pathway-specific route to biomass."
+                "Currency/cofactor metabolites (your editable list; by default H+, water, "
+                "nucleotides, NAD(P)H, FAD(H2), CoA, phosphate, quinones) are excluded "
+                "from traced paths so they don't obscure the pathway-specific route to biomass."
                 if exclude_trivial else
                 "Currency/cofactor metabolites are included in traced paths."
             ),
@@ -176,6 +178,7 @@ def api_trace_pathway():
     start_id = (data.get("start_id") or "").strip()
     target_metabolite_id = (data.get("target_metabolite_id") or "").strip()
     exclude_trivial = bool(data.get("exclude_trivial_metabolites", True))
+    currency = currency_bases(data.get("currency_metabolites"))
 
     knockout_raw = data.get("knockouts") or []
     if isinstance(knockout_raw, str):
@@ -224,7 +227,7 @@ def api_trace_pathway():
         before = run_pathway_trace(
             model, baseline_solution, start_type, start_id, target_met,
             max_levels, max_paths, exclude_trivial, flux_tolerance,
-            reaction_types, compartment_names,
+            reaction_types, compartment_names, currency,
         )
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
@@ -279,7 +282,7 @@ def api_trace_pathway():
                         after = run_pathway_trace(
                             model, ko_solution, start_type, start_id, target_met,
                             max_levels, max_paths, exclude_trivial, flux_tolerance,
-                            reaction_types, compartment_names,
+                            reaction_types, compartment_names, currency,
                         )
                     else:
                         after = {"error": ko_fba_error}

@@ -28,6 +28,15 @@ TRIVIAL_METABOLITES = {
     "q8", "q8h2", "mqn8", "mql8",
 }
 
+def currency_bases(user_list=None):
+    """The set of currency base ids to use: the user's edited list when one
+    was sent (lower-cased, compartment-free ids such as "atp"), otherwise the
+    built-in default. Shared by every feature that hides currency metabolites."""
+    if user_list is None:
+        return frozenset(TRIVIAL_METABOLITES)
+    return frozenset(str(x).strip().lower() for x in user_list if str(x).strip())
+
+
 # A trailing compartment tag can appear in any of several conventions
 # depending on how the model was built: "_c", "_e0", "[c]", "[e0]", "(c)",
 # "(e0)". This matches whichever one is present at the very end of an id and

@@ -21,8 +21,9 @@ Windows builds (see solver_utils.run_with_exact_solver).
 """
 import json
 
-from cobra.flux_analysis import flux_variability_analysis, single_gene_deletion, single_reaction_deletion
+from cobra.flux_analysis import flux_variability_analysis, single_gene_deletion
 
+from core.knockouts import reaction_knockout
 from core.memo import remember
 from core.shared import find_biomass_reaction, safe_float, wt_solution as solve_wt
 from diagnostics.solver_utils import run_with_exact_solver
@@ -41,7 +42,11 @@ def compute_frog_objective(model):
 
 def compute_frog_fva(model, fraction_of_optimum=1.0):
     """Memoized per model and fraction; see _compute_frog_fva."""
-    return remember(model, ("frog_fva", str(fraction_of_optimum)), lambda: _compute_frog_fva(model, fraction_of_optimum))
+    try:
+        fraction_of_optimum = float(fraction_of_optimum)
+    except (TypeError, ValueError):
+        fraction_of_optimum = 1.0
+    return remember(model, ("frog_fva", fraction_of_optimum), lambda: _compute_frog_fva(model, fraction_of_optimum))
 
 
 def _compute_frog_fva(model, fraction_of_optimum=1.0):
@@ -76,15 +81,14 @@ def _compute_frog_reaction_deletions(model):
     """The 'R' in FROG: single-reaction-deletion objective value for every
     reaction in the model (not just exchanges -- unlike the Exchange
     Essentiality tab, this is every reaction, per the FROG standard)."""
-    if not model.reactions:
-        return {"reactions": []}
-    df = run_with_exact_solver(model, lambda: single_reaction_deletion(model, processes=1))
-    rows = []
-    for _, row in df.iterrows():
-        ids = row["ids"]
-        rxn_id = next(iter(ids)) if ids else None
-        rows.append({"id": rxn_id, "growth": safe_float(row["growth"]), "status": str(row["status"])})
-    rows.sort(key=lambda r: (r["id"] is None, r["id"]))
+    # Shared with exchange essentiality and the demand/sink audit: knockouts
+    # they already did are not solved again.
+    def run():
+        return [{"id": rxn.id, "growth": value, "status": status}
+                for rxn in model.reactions for value, status in [reaction_knockout(model, rxn)]]
+
+    rows = run_with_exact_solver(model, run) if model.reactions else []
+    rows.sort(key=lambda r: r["id"])
     return {"reactions": rows}
 
 

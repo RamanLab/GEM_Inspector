@@ -169,7 +169,7 @@ def _network_gaps(model, metrics, details):
     })
     details["blocked"] = [{"id": r["id"], "name": r["name"], "subsystem": r["subsystem"], "type": r["type"],
                            "lb": r["lower_bound"], "ub": r["upper_bound"]} for r in blocked]
-    details["dead_end"] = [{"id": d["id"], "name": d["name"], "compartment": d["compartment"], "reason": d["reason"]} for d in dead]
+    details["dead_end"] = [{"id": d["id"], "name": d["name"], "compartment": d["compartment"], "class": d["class_label"]} for d in dead]
     details["blocked_by_subsystem"] = dict(by_subsystem)
 
 
