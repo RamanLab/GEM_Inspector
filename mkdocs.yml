@@ -5,6 +5,8 @@ repo_url: https://github.com/RamanLab/GEM_Inspector
 docs_dir: documentation
 theme:
   name: material
+  font:
+    text: Inter
   features:
     - navigation.tabs
     - navigation.sections
@@ -15,10 +17,8 @@ theme:
     - toc.follow
   palette:
     - scheme: default
-      primary: indigo
       toggle: {icon: material/weather-night, name: Dark mode}
     - scheme: slate
-      primary: indigo
       toggle: {icon: material/weather-sunny, name: Light mode}
 markdown_extensions:
   - admonition
@@ -30,6 +30,8 @@ markdown_extensions:
   - pymdownx.tabbed: {alternate_style: true}
   - pymdownx.highlight
   - pymdownx.arithmatex: {generic: true}
+extra_css:
+  - stylesheets/extra.css
 extra_javascript:
   - https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js
 nav:
@@ -52,6 +54,6 @@ nav:
       - Architecture: implementation/architecture.md
   - Positioning:
       - Comparison with existing tools: positioning.md
-      - Benchmarks: benchmarks.md
+      # - Benchmarks: benchmarks.md
   - FAQ and troubleshooting: faq.md
   - References: references.md

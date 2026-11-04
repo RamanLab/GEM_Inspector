@@ -28,4 +28,4 @@
 
 ## Reporting a problem
 
-Please send the model identifier or file (if it can be shared), the steps to reproduce, the start-up line beginning `Inspector:` (it shows the solver and options), and any traceback from the terminal. Issues can be filed at [REPO-URL]/issues.
+Please send the model identifier or file (if it can be shared), the steps to reproduce, the start-up line beginning `Inspector:` (it shows the solver and options), and any traceback from the terminal. Issues can be filed at https://github.com/RamanLab/GEM_Inspector/issues.

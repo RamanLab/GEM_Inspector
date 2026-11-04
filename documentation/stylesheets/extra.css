@@ -1,0 +1,31 @@
+/* Colours follow the GEM Inspector interface (static/app.css). */
+:root, [data-md-color-scheme="default"] {
+  --md-primary-fg-color: #111827;
+  --md-primary-fg-color--light: #1f2937;
+  --md-primary-fg-color--dark: #0b1220;
+  --md-accent-fg-color: #2563eb;
+  --md-default-bg-color: #f5f7fb;
+  --md-default-fg-color: #18212f;
+  --md-default-fg-color--light: #64748b;
+  --md-typeset-a-color: #2563eb;
+  --md-code-bg-color: #eef2f8;
+  --md-footer-bg-color: #111827;
+  --md-footer-bg-color--dark: #0b1220;
+}
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #111827;
+  --md-accent-fg-color: #60a5fa;
+  --md-default-bg-color: #0f172a;
+  --md-typeset-a-color: #60a5fa;
+}
+.md-header, .md-tabs { background-color: #111827; color: #fff; }
+.md-tabs__link--active, .md-tabs__link:hover { color: #fff; opacity: 1; }
+.md-typeset table:not([class]) {
+  background: #fff; border: 1px solid #e5eaf1; border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(15, 23, 42, .06); font-size: .78rem;
+}
+.md-typeset table:not([class]) th { background: #eff6ff; color: #18212f; }
+.md-typeset .admonition, .md-typeset details { border-radius: 10px; }
+.md-typeset img { border: 1px solid #e5eaf1; border-radius: 10px; box-shadow: 0 8px 28px rgba(15, 23, 42, .06); }
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) { background: #111c33; border-color: #1f2a44; }
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) th { background: #1e293b; color: #e2e8f0; }

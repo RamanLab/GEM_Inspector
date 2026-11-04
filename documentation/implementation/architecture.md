@@ -1,6 +1,6 @@
 # Architecture
 
-GEM Inspector is a Flask application of roughly 7,500 lines of Python and 5,500 lines of JavaScript. The back end exposes JSON endpoints over COBRApy models; the front end is a single page written in plain JavaScript, so there is no build step and no Node dependency at run time.
+GEM Inspector follows a lightweight client-server architecture built around Flask and COBRApy. The backend handles metabolic model processing and analysis, exposing functionality through JSON endpoints. The frontend is implemented as a single-page application using vanilla JavaScript, without requiring a separate build process or a Node.js runtime.
 
 ## Layout
 
