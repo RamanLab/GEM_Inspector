@@ -179,6 +179,7 @@ def api_trace_pathway():
     target_metabolite_id = (data.get("target_metabolite_id") or "").strip()
     exclude_trivial = bool(data.get("exclude_trivial_metabolites", True))
     currency = currency_bases(data.get("currency_metabolites"))
+    extra = currency_bases(data.get("extra_metabolites") or [])  # shown one hop off the path
 
     knockout_raw = data.get("knockouts") or []
     if isinstance(knockout_raw, str):
@@ -227,7 +228,7 @@ def api_trace_pathway():
         before = run_pathway_trace(
             model, baseline_solution, start_type, start_id, target_met,
             max_levels, max_paths, exclude_trivial, flux_tolerance,
-            reaction_types, compartment_names, currency,
+            reaction_types, compartment_names, currency, extra,
         )
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
@@ -282,7 +283,7 @@ def api_trace_pathway():
                         after = run_pathway_trace(
                             model, ko_solution, start_type, start_id, target_met,
                             max_levels, max_paths, exclude_trivial, flux_tolerance,
-                            reaction_types, compartment_names, currency,
+                            reaction_types, compartment_names, currency, extra,
                         )
                     else:
                         after = {"error": ko_fba_error}

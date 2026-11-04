@@ -1,28 +1,33 @@
-"""Dead-end metabolites by GapFind (Kumar, Suthers & Maranas 2007), the
-algorithm behind COBRA Toolbox gapFind.m (see docs/REFERENCES.md).
+"""Dead-end metabolites by the GapFind definition (Kumar, Dasika & Maranas 2007;
+COBRA Toolbox gapFind.m -- see docs/REFERENCES.md).
 
-GapFind is a MILP. Every flux v_j stays inside its bounds, every metabolite i
-gets a binary x_i ("can be produced"), and each reaction entry that could
-produce i gets a binary w_ij ("j produces i at a rate of at least eps"):
+A metabolite i is *not produced* (NP) when no flux distribution within the
+bounds, in which no metabolite is consumed faster than it is made
+(sum_j S_ij v_j >= 0 for every metabolite), has a reaction producing it at a
+rate of at least eps. Solving the same problem on -S finds the metabolites that
+are *not consumed* (NC). Roots are the metabolites no reaction touches in the
+needed direction at all; the rest are inherited from a root: downstream (NP)
+and upstream (NC).
 
-    sum_j S_ij v_j >= 0                 net production of every metabolite
-    S_ij v_j >= eps   if w_ij = 1       (positive entries of irreversible
-    S_ij v_j <= M w_ij                   reactions; every entry of reversible
-    sum_j w_ij >= x_i                    ones; reversible ones also get
-    maximise sum_i x_i                   S_ij v_j >= eps - M when w_ij = 0)
+GapFind states this as one MILP (a binary per metabolite and per producing
+reaction entry, with a big M). That MILP ties eps to every reaction entry, so
+its answer depends on the scale of the flux and of the stoichiometric
+coefficients, and it reported about half of the no-consumption metabolites of
+iJO1366 although the flux distributions that consume them exist (verified, see
+docs/TODO.md). The conditions are linear and homogeneous, so the same
+definition is solved here exactly by linear programs, in two phases:
 
-A metabolite left with x_i = 0 cannot be produced (no-production, NP). The same
-MILP on -S finds the metabolites that cannot be consumed (no-consumption, NC).
-Roots are the metabolites no reaction touches in the needed direction at all;
-the rest are inherited from a root: downstream (NP) and upstream (NC).
+  1. one LP certifies many metabolites at once (maximise sum_i min(P_i, eps),
+     P_i = production through reactions that run in one direction only);
+  2. each metabolite left over is tested on its own: for every reaction entry
+     that could produce it, maximise S_ij v_j and stop at the first >= eps.
 
 As recommended for gapFind.m, exchange reactions are opened so that gaps are
-those of the network itself and not of the medium. M is the number of reactions
-and eps is 1e-4, as in the toolbox.
+those of the network itself and not of the medium.
 
-The two MILPs run in child processes (python -m diagnostics.gapfind), side by
-side: a crash of the solver, seen with GLPK on some Windows builds, then fails
-the request instead of killing the web server.
+The two problems (production on S, consumption on -S) run in child processes
+(python -m diagnostics.gapfind), side by side, so a crash of a native solver
+library fails the request instead of killing the web server.
 """
 import pickle
 import subprocess
@@ -32,6 +37,7 @@ from pathlib import Path
 
 import numpy as np
 import scipy.sparse as sp
+from scipy.optimize import linprog
 
 from core.memo import not_error, remember
 
@@ -47,53 +53,59 @@ CLASS_LABELS = {
 }
 
 
-def _unproduced(S, lb, ub):
-    """Boolean mask of the metabolites that cannot be produced (the MILP)."""
-    from optlang import glpk_interface as glpk
+def _solve(c, A_ub, lb, ub):
+    """min c.x s.t. A_ub x <= 0, lb <= x <= ub (HiGHS). Raises when infeasible."""
+    result = linprog(c, A_ub=A_ub, b_ub=np.zeros(A_ub.shape[0]), bounds=np.column_stack([lb, ub]), method="highs")
+    if result.status != 0:
+        raise RuntimeError(f"GapFind LP ended with status {result.status}: {result.message}")
+    return result.x
 
-    S = S.tocoo()
+
+def _batch_certify(S, lb, ub, candidates):
+    """Metabolites among `candidates` that one flux vector can produce through
+    reactions running in one direction only (production = S_ij v_j >= 0 there)."""
     n_met, n_rxn = S.shape
-    reversible = lb < 0
-    big_m = float(n_rxn)  # as in gapFind.m
+    forward, backward = lb >= 0, ub <= 0
+    coo = S.tocoo()
+    keep = (forward[coo.col] & (coo.data > 0)) | (backward[coo.col] & (coo.data < 0))
+    P = sp.csr_matrix((coo.data[keep], (coo.row[keep], coo.col[keep])), shape=S.shape)[candidates]
+    k = len(candidates)
+    # variables: v (n_rxn), z (k); z_i <= P_i v and z_i <= eps
+    A = sp.vstack([sp.hstack([-S, sp.csr_matrix((n_met, k))]),
+                   sp.hstack([-P, sp.identity(k)])]).tocsr()
+    c = np.concatenate([np.zeros(n_rxn), -np.ones(k)])
+    x = _solve(c, A, np.concatenate([lb, np.zeros(k)]), np.concatenate([ub, np.full(k, EPSILON)]))
+    return x[n_rxn:] >= 0.999 * EPSILON
 
-    v = [glpk.Variable(f"v{j}", lb=float(lb[j]), ub=float(ub[j])) for j in range(n_rxn)]
-    net = [[] for _ in range(n_met)]       # S_ij v_j for each metabolite
-    producers = [[] for _ in range(n_met)]  # the w_ij of each metabolite
-    constraints = []
-    for i, j, a in zip(S.row, S.col, S.data):
-        term = a * v[j]
-        net[i].append(term)
-        if not reversible[j] and a < 0:
+
+def _entry_produces(S, A_ub, lb, ub, i):
+    """True when some reaction entry of metabolite i can produce it at >= eps."""
+    row = S.getrow(i)
+    for j, a in zip(row.indices, row.data):
+        if (a > 0 and ub[j] <= 0) or (a < 0 and lb[j] >= 0):
             continue
-        w = glpk.Variable(f"w{i}_{j}", type="binary")
-        producers[i].append(w)
-        constraints.append(glpk.Constraint(term - big_m * w, ub=0))
-        if reversible[j]:
-            constraints.append(glpk.Constraint(term - big_m * w, lb=EPSILON - big_m))
-        else:
-            constraints.append(glpk.Constraint(term - EPSILON * w, lb=0))
+        c = np.zeros(S.shape[1])
+        c[j] = -a
+        if -c @ _solve(c, A_ub, lb, ub) >= EPSILON:
+            return True
+    return False
 
-    # A metabolite nothing can produce has no x_i: it is unproducible outright.
-    x = {i: glpk.Variable(f"x{i}", type="binary") for i in range(n_met) if producers[i]}
-    for i in range(n_met):
-        if net[i]:
-            constraints.append(glpk.Constraint(sum(net[i]), lb=0))
-        if i in x:
-            constraints.append(glpk.Constraint(sum(producers[i]) - x[i], lb=0))
 
-    problem = glpk.Model(name="gapfind")
-    problem.add(v)
-    problem.add(list(x.values()))
-    problem.add(constraints)
-    problem.objective = glpk.Objective(sum(x.values()), direction="max")
-    status = problem.optimize()
-    if status != "optimal":
-        raise RuntimeError(f"GapFind MILP ended with status '{status}'")
-
-    unproduced = np.ones(n_met, dtype=bool)
-    for i, var in x.items():
-        unproduced[i] = var.primal < 0.5
-    return unproduced
+def _unproduced(S, lb, ub):
+    """Boolean mask of the metabolites that cannot be produced."""
+    S = S.tocsr()
+    produced = np.zeros(S.shape[0], dtype=bool)
+    todo = np.flatnonzero(np.diff(S.indptr) > 0)
+    while len(todo):
+        certified = _batch_certify(S, lb, ub, todo)
+        if not certified.any():
+            break
+        produced[todo[certified]] = True
+        todo = todo[~certified]
+    A_ub = -S
+    for i in todo:
+        produced[i] = _entry_produces(S, A_ub, lb, ub, i)
+    return ~produced
 
 
 def _has_neighbour(S, lb, ub):
@@ -127,7 +139,8 @@ def _network_arrays(model):
     S = sp.csr_matrix((vals, (rows, cols)), shape=(len(model.metabolites), len(model.reactions)))
     lb = np.array([r.lower_bound for r in model.reactions], dtype=float)
     ub = np.array([r.upper_bound for r in model.reactions], dtype=float)
-    exchange = np.array([r.id in {e.id for e in model.exchanges} for r in model.reactions])
+    exchange_ids = {e.id for e in model.exchanges}
+    exchange = np.array([r.id in exchange_ids for r in model.reactions])
     lb[exchange], ub[exchange] = np.minimum(lb[exchange], -OPEN), np.maximum(ub[exchange], OPEN)
     return S, lb, ub
 
@@ -145,7 +158,7 @@ def _compute_dead_ends(model):
     with tempfile.TemporaryDirectory() as tmp:
         job = Path(tmp, "job.pkl")
         job.write_bytes(pickle.dumps((S, lb, ub)))
-        # The two MILPs (production on S, consumption on -S) are independent: run them side by side.
+        # The two LP problems (production on S, consumption on -S) are independent: run them side by side.
         children = [(sign, Path(tmp, f"result{sign}.pkl")) for sign in ("+", "-")]
         procs = [subprocess.Popen(
             [sys.executable, "-m", "diagnostics.gapfind", str(job), str(out), sign],

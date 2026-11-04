@@ -1,8 +1,22 @@
+# Python
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Built docs, archives, logs, local files
+site/
+*.tar.gz
+*.log
+*.pkl
+.env
+.DS_Store
+Thumbs.db
 firebase-debug.log
+
+# Local working files
 README copy.md
+Claude outputs
+docs
 docs/TODO.md
 docs/REFERENCES.md
-Claude outputs

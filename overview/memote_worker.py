@@ -188,7 +188,10 @@ def main(argv):
     started = time.time()
     _write_progress("loading")
 
+    from core import solver_config
     from core.shared import load_uploaded_model
+
+    solver_config.apply()  # same solver choice as the app (GEM_SOLVER)
 
     sbml_version = None
     model = None

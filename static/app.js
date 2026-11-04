@@ -1923,6 +1923,8 @@ function renderDebugTrace(trace) {
 
 let TRACER_RESULT = null;
 let TRACER_CY = null;
+// One colour per compartment (node outline and lane), in order of appearance.
+const LANE_COLORS = ["#2563eb", "#059669", "#d97706", "#7c3aed", "#dc2626", "#0891b2", "#be185d", "#65a30d"];
 let TRACER_KO_VIEW = "before";     // "before" | "after" — which snapshot the words/network view renders
 let TRACER_HIGHLIGHT_KO = true;    // whether changed reactions are called out (badge / edge color)
 
@@ -1980,6 +1982,10 @@ function renderTracer() {
         </div>
       </div>
       <div class="tracer-field tracer-field-wide">
+        <label>Also show metabolites (optional)</label>
+        <input id="tracerExtra" type="text" placeholder="e.g. atp, nadh, h — comma separated">
+      </div>
+      <div class="tracer-field tracer-field-wide">
         <label>Compare knockout (optional)</label>
         <input id="tracerKnockouts" type="text" list="tracerKoList" placeholder="e.g. EX_glc_D_e, atp_c — comma separated">
       </div>
@@ -2022,6 +2028,7 @@ async function runPathwayTrace() {
   const maxPaths = parseInt($("tracerMaxPaths").value, 10) || 10;
   const hideTrivial = $("tracerHideTrivial").checked;
   const knockouts = $("tracerKnockouts").value.split(",").map(s => s.trim()).filter(Boolean);
+  const extra = $("tracerExtra").value.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
 
   if (!startId) { $("tracerStatus").innerHTML = `<span class="error">Choose a starting ${escapeHtml(startType)}.</span>`; return; }
   if (!targetId) { $("tracerStatus").innerHTML = `<span class="error">Choose a target metabolite.</span>`; return; }
@@ -2050,6 +2057,7 @@ async function runPathwayTrace() {
         max_paths: maxPaths,
         exclude_trivial_metabolites: hideTrivial,
         currency_metabolites: currencyPayload(),
+        extra_metabolites: extra,
         knockouts,
       }),
     });
@@ -2206,6 +2214,15 @@ function fluxDeltaClass(rxnId) {
   return "";
 }
 
+// "also consumes / produces" line for the extra metabolites the user asked to see.
+function sideMetabolitesHtml(rxn) {
+  const side = rxn.side_metabolites || [];
+  if (!side.length) return "";
+  const part = role => side.filter(m => m.role === role).map(m => escapeHtml(m.name || m.id)).join(", ");
+  const used = part("substrate"), made = part("product");
+  return `<div class="stoich">${used ? `uses ${used}` : ""}${used && made ? " · " : ""}${made ? `makes ${made}` : ""}</div>`;
+}
+
 function renderTracerTextView(data) {
   if (!data.paths || !data.paths.length) {
     $("tracerViewContent").innerHTML = `<div class="note">No active-flux pathway found from ${escapeHtml(data.start_id)} to ${escapeHtml(data.target_metabolite.id)} ${TRACER_KO_VIEW === "after" ? "(after knockout)" : ""}.</div>`;
@@ -2218,6 +2235,7 @@ function renderTracerTextView(data) {
         <span class="debug-arrow">↓</span> <span class="badge">${escapeHtml(rxn.id)}</span> flux=${fmt(rxn.flux)}
         ${rxn.subsystem ? `<span class="stoich"> · ${escapeHtml(rxn.subsystem)}</span>` : ""}
         ${fluxDeltaBadge(rxn.id)}
+        ${sideMetabolitesHtml(rxn)}
         <div class="debug-met">→ ${escapeHtml(met.name || met.id)} <span class="stoich">${escapeHtml(met.id)}</span></div>
       </div>`;
     }).join("");
@@ -2237,13 +2255,15 @@ function renderTracerNetworkView(data) {
       <select id="tracerFilterSubsystem"><option value="">All subsystems</option></select>
       <label class="tracer-flux-filter">Min |flux| <input id="tracerFilterFlux" type="number" min="0" step="0.01" value="0"></label>
       <input id="tracerFilterSearch" type="text" placeholder="Highlight metabolite or reaction…">
+      <label class="debug-toggle"><input type="checkbox" id="tracerLanes"> Compartment lanes</label>
       <span id="tracerNetCount" class="stoich"></span>
     </div>
-    <div id="tracerCyContainer" class="tracer-cy-container"></div>
+    <div class="tracer-cy-wrap"><div id="tracerLaneLayer"></div><div id="tracerCyContainer" class="tracer-cy-container"></div></div>
     <div class="tracer-legend">
       <span><i class="tracer-dot tracer-dot-start"></i> Start</span>
       <span><i class="tracer-dot tracer-dot-target"></i> Target</span>
       <span><i class="tracer-dot tracer-dot-mid"></i> Intermediate</span>
+      <span><i class="tracer-dot tracer-dot-side"></i> Extra metabolite (one hop)</span>
       ${showKoLegend ? `
         <span><i class="tracer-dot tracer-dot-ko-removed"></i> Removed by KO</span>
         <span><i class="tracer-dot tracer-dot-ko-added"></i> New route after KO</span>
@@ -2264,6 +2284,10 @@ function renderTracerNetworkView(data) {
 
   const nodesById = new Map();
   const edges = [];
+  const edgeKeys = new Set(); // one edge per reaction hop, however many paths share it
+  const sideNodes = new Map();
+  const sideEdges = [];
+  const depthOf = new Map(); // earliest step at which a metabolite appears: its column
   const subsystems = new Set();
 
   data.paths.forEach((p, pathIdx) => {
@@ -2272,28 +2296,67 @@ function renderTracerNetworkView(data) {
     // type…) so the hover tooltip below has everything it needs without a
     // second request — the network view is just a different rendering of
     // the same data the text view already gets.
-    p.metabolites.forEach(m => {
+    p.metabolites.forEach((m, idx) => {
       if (!nodesById.has(m.id)) nodesById.set(m.id, m);
+      depthOf.set(m.id, Math.min(idx, depthOf.has(m.id) ? depthOf.get(m.id) : idx));
     });
     p.reactions.forEach((rxn, idx) => {
       const source = p.metabolites[idx].id;
       const target = p.metabolites[idx + 1].id;
       if (rxn.subsystem) subsystems.add(rxn.subsystem);
-      edges.push(Object.assign({}, rxn, {
-        id: `e_${pathIdx}_${idx}`,
-        source, target,
-        rxnId: rxn.id, rxnName: rxn.name || "",
-        koClass: fluxDeltaClass(rxn.id),
-      }));
+      const hop = `${rxn.id}|${source}|${target}`;
+      if (!edgeKeys.has(hop)) {
+        edgeKeys.add(hop);
+        edges.push(Object.assign({}, rxn, {
+          id: `e_${pathIdx}_${idx}`,
+          source, target,
+          rxnId: rxn.id, rxnName: rxn.name || "",
+          koClass: fluxDeltaClass(rxn.id),
+        }));
+      }
+      // Extra metabolites hang off the hop's own metabolite: substrates feed
+      // into its source, products leave from its target.
+      (rxn.side_metabolites || []).forEach(m => {
+        const key = `${rxn.id}|${m.id}`;
+        if (edgeKeys.has(key)) return;
+        edgeKeys.add(key);
+        const anchor = m.role === "substrate" ? source : target;
+        if (!nodesById.has(m.id) && !sideNodes.has(m.id)) sideNodes.set(m.id, Object.assign({}, m, { anchor }));
+        sideEdges.push(Object.assign({}, rxn, {
+          id: `s_${pathIdx}_${idx}_${m.id}`,
+          source: m.role === "substrate" ? m.id : anchor,
+          target: m.role === "substrate" ? anchor : m.id,
+          rxnId: rxn.id, rxnName: rxn.name || "",
+        }));
+      });
     });
   });
+
+  // Compartments in order of first appearance along the trace: one colour and
+  // one lane each.
+  const compartments = [];
+  [...nodesById.values(), ...sideNodes.values()].forEach(n => {
+    if (!compartments.some(c => c.id === n.compartment)) {
+      compartments.push({ id: n.compartment, name: n.compartment_name || n.compartment || "unassigned" });
+    }
+  });
+  const laneColor = id => LANE_COLORS[compartments.findIndex(c => c.id === id) % LANE_COLORS.length];
 
   const elements = [];
   nodesById.forEach(n => {
     let role = "intermediate";
     if (startIds.has(n.id)) role = "start";
     if (n.id === targetId) role = "target";
-    elements.push({ data: Object.assign({}, n, { label: n.name || n.id }), classes: role });
+    elements.push({ data: Object.assign({}, n, { label: n.name || n.id, laneColor: laneColor(n.compartment) }), classes: role });
+  });
+  sideNodes.forEach(n => {
+    elements.push({ data: Object.assign({}, n, { label: n.name || n.id, laneColor: laneColor(n.compartment) }), classes: "side" });
+  });
+  sideEdges.forEach(e => {
+    elements.push({
+      data: Object.assign({}, e, { label: e.rxnId, flux: Math.abs(e.flux), rawFlux: e.flux }),
+      classes: "side-edge",
+    });
   });
   edges.forEach(e => {
     elements.push({
@@ -2320,8 +2383,10 @@ function renderTracerNetworkView(data) {
       { selector: "node", style: {
         "label": "data(label)", "font-size": 9, "text-valign": "bottom", "text-margin-y": 4,
         "text-wrap": "ellipsis", "text-max-width": "70px",
-        "width": 26, "height": 26, "background-color": "#94a3b8", "border-width": 2, "border-color": "#64748b",
+        "width": 26, "height": 26, "background-color": "#94a3b8", "border-width": 3, "border-color": "data(laneColor)",
       }},
+      { selector: "node.side", style: { "width": 16, "height": 16, "background-color": "#e2e8f0", "border-style": "dashed", "font-size": 8 } },
+      { selector: "edge.side-edge", style: { "width": 1, "line-style": "dashed", "line-color": "#cbd5e1", "target-arrow-color": "#cbd5e1", "font-size": 7 } },
       { selector: "node.start", style: { "background-color": "#2563eb", "border-color": "#1e40af", "width": 32, "height": 32 } },
       { selector: "node.target", style: { "background-color": "#047857", "border-color": "#065f46", "width": 32, "height": 32 } },
       { selector: "node.tracer-dimmed", style: { "opacity": 0.15 } },
@@ -2346,9 +2411,59 @@ function renderTracerNetworkView(data) {
     wheelSensitivity: 0.25,
   });
 
+  // Compartment lanes: columns follow the trace order, rows are compartments,
+  // separated by dashed lines (drawn behind the graph, following pan/zoom).
+  const lanesBox = $("tracerLanes");
+  lanesBox.checked = compartments.length > 1;
+  lanesBox.disabled = compartments.length < 2;
+  let lanes = [];
+  const applyLanes = () => {
+    if (!lanesBox.checked) {
+      lanes = [];
+      TRACER_CY.layout({ name: "breadthfirst", roots: [...startIds], directed: true, spacingFactor: 1.25, padding: 24 }).run();
+      drawLanes();
+      return;
+    }
+    const ROW = 64, COL = 190, PAD = 36;
+    const colOf = n => depthOf.has(n.id()) ? depthOf.get(n.id()) : (depthOf.get(n.data("anchor")) || 0);
+    const slot = new Map(), height = compartments.map(() => 1);
+    TRACER_CY.nodes().forEach(n => {
+      const lane = compartments.findIndex(c => c.id === n.data("compartment"));
+      const key = `${lane}|${colOf(n)}`;
+      slot.set(n.id(), { lane, col: colOf(n), row: slot.get(key) || 0 });
+      slot.set(key, (slot.get(key) || 0) + 1);
+      height[lane] = Math.max(height[lane], slot.get(key));
+    });
+    let top = 0;
+    lanes = compartments.map((c, i) => {
+      const lane = { name: c.name, color: LANE_COLORS[i % LANE_COLORS.length], top, height: height[i] * ROW + PAD };
+      top += lane.height;
+      return lane;
+    });
+    TRACER_CY.layout({
+      name: "preset", padding: 24,
+      positions: n => {
+        const sl = slot.get(n.id());
+        return { x: sl.col * COL, y: lanes[sl.lane].top + PAD / 2 + (sl.row + 0.5) * ROW };
+      },
+    }).run();
+    drawLanes();
+  };
+  const drawLanes = () => {
+    const layer = $("tracerLaneLayer");
+    if (!layer) return;
+    const zoom = TRACER_CY.zoom(), pan = TRACER_CY.pan();
+    layer.innerHTML = lanes.map(l => `<div class="tracer-lane" style="top:${pan.y + l.top * zoom}px;height:${l.height * zoom}px;background:${l.color}14;border-color:${l.color}">
+      <span style="color:${l.color}">${escapeHtml(l.name)}</span></div>`).join("");
+  };
+  TRACER_CY.on("pan zoom", drawLanes);
+  lanesBox.addEventListener("change", applyLanes);
+  if (lanesBox.checked) applyLanes();
+
   attachTracerNetworkTooltips(TRACER_CY);
 
-  $("tracerNetCount").textContent = `${nodesById.size} metabolites · ${edges.length} reaction hops`;
+  $("tracerNetCount").textContent = `${nodesById.size} metabolites · ${edges.length} reaction hops` +
+    (sideNodes.size ? ` · ${sideNodes.size} extra` : "");
 
   const applyFilters = () => {
     const subVal = subsystemSelect.value;

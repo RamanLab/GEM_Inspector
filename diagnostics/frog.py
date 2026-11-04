@@ -12,12 +12,11 @@ maximize, one per reaction for R, one per gene for G), whereas O is a
 single, near-instant solve. FVA's growth cutoff (fraction_of_optimum) is
 configurable, same as the Minimal Medium tab's cutoff.
 
-All the actual LP solving reuses cobra's own bulk analysis functions,
-forced to processes=1 (Windows "spawn" multiprocessing is fragile/slow to
-invoke from inside a live Flask request) and wrapped in
-run_with_exact_solver -- this class of repeated-solve computation is
-exactly what has been observed to crash GLPK's default solver on some
-Windows builds (see solver_utils.run_with_exact_solver).
+All the actual LP solving reuses cobra's own bulk analysis functions, with
+the worker-process count from core.solver_config (1 on Windows, where
+"spawn" multiprocessing is slow), wrapped in run_with_exact_solver -- this
+class of repeated-solve computation is what has been observed to crash
+GLPK's default solver on some Windows builds (see solver_utils).
 """
 import json
 
@@ -26,6 +25,7 @@ from cobra.flux_analysis import flux_variability_analysis, single_gene_deletion
 from core.knockouts import reaction_knockout
 from core.memo import remember
 from core.shared import find_biomass_reaction, safe_float, wt_solution as solve_wt
+from core.solver_config import processes
 from diagnostics.solver_utils import run_with_exact_solver
 
 
@@ -62,7 +62,7 @@ def _compute_frog_fva(model, fraction_of_optimum=1.0):
     df = run_with_exact_solver(
         model,
         lambda: flux_variability_analysis(
-            model, reaction_list=None, fraction_of_optimum=fraction_of_optimum, processes=1,
+            model, reaction_list=None, fraction_of_optimum=fraction_of_optimum, processes=processes(),
         ),
     )
     rows = [
@@ -101,7 +101,7 @@ def _compute_frog_gene_deletions(model):
     in the model."""
     if not model.genes:
         return {"genes": []}
-    df = run_with_exact_solver(model, lambda: single_gene_deletion(model, processes=1))
+    df = run_with_exact_solver(model, lambda: single_gene_deletion(model, processes=processes()))
     rows = []
     for _, row in df.iterrows():
         ids = row["ids"]

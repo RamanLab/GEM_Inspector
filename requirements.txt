@@ -1,7 +1,8 @@
 Flask>=3.0,<4
-cobra>=0.31,<0.32
+cobra>=0.31,<0.33
 python-libsbml>=5.20
-gunicorn
+gunicorn>=22
 memote>=0.17,<0.18
-scipy
+scipy>=1.9
 openpyxl
+# optional, faster solvers (need a licence): gurobipy, cplex

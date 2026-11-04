@@ -1,0 +1,57 @@
+site_name: GEM Inspector
+site_description: A browser-based toolkit for inspecting, diagnosing and debugging genome-scale metabolic models.
+site_author: RamanLab, IIT Madras
+repo_url: https://github.com/RamanLab/GEM_Inspector
+docs_dir: documentation
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - search.suggest
+    - content.code.copy
+    - toc.follow
+  palette:
+    - scheme: default
+      primary: indigo
+      toggle: {icon: material/weather-night, name: Dark mode}
+    - scheme: slate
+      primary: indigo
+      toggle: {icon: material/weather-sunny, name: Light mode}
+markdown_extensions:
+  - admonition
+  - attr_list
+  - tables
+  - toc: {permalink: true}
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed: {alternate_style: true}
+  - pymdownx.highlight
+  - pymdownx.arithmatex: {generic: true}
+extra_javascript:
+  - https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js
+nav:
+  - Overview: index.md
+  - Getting started:
+      - Installation: getting-started/installation.md
+      - Solvers and computing resources: getting-started/solvers.md
+      - Running and deploying: getting-started/running.md
+  - User guide:
+      - Overview module: guide/overview.md
+      - Diagnostics and comparative analyses: guide/diagnostics.md
+      - Debugging toolkit: guide/debugging.md
+      - Annotation and translation: guide/annotation.md
+      - Reports and exports: guide/reports.md
+  - Methods:
+      - Network gaps: methods/network-gaps.md
+      - Pathway tracing: methods/tracing.md
+      - Other analyses: methods/other-analyses.md
+  - Implementation:
+      - Architecture: implementation/architecture.md
+  - Positioning:
+      - Comparison with existing tools: positioning.md
+      - Benchmarks: benchmarks.md
+  - FAQ and troubleshooting: faq.md
+  - References: references.md

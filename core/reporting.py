@@ -13,6 +13,7 @@ endpoints -- this only needs to get the finished HTML onto disk, two ways:
     frontend then falls back to a plain text field or a browser download.
   - /api/save-report writes a given HTML string straight to a given path.
 """
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +22,14 @@ from flask import Blueprint, jsonify, request
 from werkzeug.utils import secure_filename
 
 reporting_bp = Blueprint("reporting", __name__)
+
+
+@reporting_bp.before_request
+def block_when_hosted():
+    """On a shared server (GEM_HOSTED=1) the browser and the server are different
+    machines, and writing to a user-chosen path would write on the server."""
+    if os.environ.get("GEM_HOSTED") == "1":
+        return jsonify({"error": "Saving to a path is disabled on this server. Leave the path empty to download the report through your browser."}), 403
 
 
 @reporting_bp.get("/api/browse-save-path")
