@@ -8,7 +8,7 @@ The summary presents the number of genes, metabolites, reactions and compartment
 
 ### MEMOTE quality assessment
 
-On request, the tool runs [MEMOTE](https://memote.readthedocs.io) (Lieven et al., 2020) on the model and reports the total score, the section scores and a list of the areas that need attention, each linked to the tab of this tool that can investigate it. The full MEMOTE HTML report can be opened or downloaded. MEMOTE runs in a separate process, shows progress, can be cancelled, and is repeated once with an exact-arithmetic GLPK solver if the first attempt fails.
+The *MEMOTE* tab of the Overview module runs [MEMOTE](https://memote.readthedocs.io) (Lieven et al., 2020) on the model and reports the total score, the section scores and a list of the areas that need attention, each linked to the tab of this tool that can investigate it. The full MEMOTE HTML report can be opened or downloaded. MEMOTE runs in a separate process, shows progress, can be cancelled, and is repeated once with an exact-arithmetic GLPK solver if the first attempt fails.
 
 ## Metabolites, reactions and genes
 

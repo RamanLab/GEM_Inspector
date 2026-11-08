@@ -6,7 +6,7 @@ The **Generate report** button on the results page assembles the sections chosen
 
 ## Multiple models
 
-The *Analyze multiple models* workflow takes several models and produces a side-by-side comparison of model statistics, quality control indicators and automatically raised findings, with charts, as an HTML report and an Excel workbook. Thresholds for the findings can be adjusted. The report includes the network-gap fractions computed by the same GapFind and FVA analyses as the single-model workflow.
+The *Analyze multiple models* workflow takes two to five models (the server rejects more) and produces a side-by-side comparison of model statistics, quality control indicators and automatically raised findings, with charts, as an HTML report and an Excel workbook. Thresholds for the findings can be adjusted. The report includes the network-gap fractions computed by the same GapFind and FVA analyses as the single-model workflow. Every model is analysed in full, so genome-scale models take minutes each; the interface asks for confirmation above three models.
 
 ## CSV, Excel and clipboard
 

@@ -408,3 +408,5 @@ td.num, th[data-key="lower_bound"], th[data-key="upper_bound"], th[data-key="wt_
 .gap-chip.active { background:var(--accent); color:#fff; }
 .currency-edit { font-size:12px; padding:6px 10px; }
 .mini-stat-value .unit { font-size:12px; font-weight:500; color:var(--muted); }
+
+.warn-box button.secondary { background:#fff; color:var(--text); border:1px solid var(--line); }

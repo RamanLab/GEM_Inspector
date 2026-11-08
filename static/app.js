@@ -648,8 +648,6 @@ function renderOverview() {
       <div class="mini-stat"><div class="mini-stat-value">${escapeHtml(s.solver)}</div><div class="mini-stat-label">Solver</div></div>
     </div>
 
-    <div id="memoteBox"></div>
-
     <h3>Compartments</h3>
     <div class="chip-row">${s.compartment_details.map(c => {
       const extra = c.raw_name && c.raw_name !== c.name ? ` (model-provided name: ${c.raw_name})` : "";
@@ -3883,15 +3881,14 @@ async function cancelMemote() {
 }
 
 $("memotePill").addEventListener("click", () => {
-  goToTab("overview");
-  $("memoteBox")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  goToTab("memote");
 });
 
 // ---------------------------------------------------------------------------
 // References
 // ---------------------------------------------------------------------------
 const REFERENCES = [
-  { name: "MEMOTE", why: "Model quality test suite run from the Overview page.",
+  { name: "MEMOTE", why: "Model quality test suite run from the MEMOTE tab.",
     cite: "Lieven C. et al. MEMOTE for standardized genome-scale metabolic model testing. Nature Biotechnology 38, 272–276 (2020).",
     links: [["Paper", "https://doi.org/10.1038/s41587-020-0446-y"], ["Documentation", "https://memote.readthedocs.io/"], ["Source code", "https://github.com/opencobra/memote"]] },
   { name: "COBRApy", why: "Model loading, constraint-based analysis (FBA, FVA, knockouts) and solver interface.",

@@ -21,12 +21,12 @@
       <button type="button" class="choice-card" id="chooseSingle">
         <span class="choice-icon">1</span>
         <strong>Inspect a single model</strong>
-        <span>Upload one model for in-depth characterisation through overview, diagnostic, debugging and annotation modules.</span>
+        <span>Upload one model for in-depth characterisation through overview, diagnostic, debugging and annotation modules, with MEMOTE and exportable reports.</span>
       </button>
       <button type="button" class="choice-card" id="chooseMulti">
         <span class="choice-icon">N</span>
         <strong>Analyze multiple models</strong>
-        <span>Upload several models for a side-by-side comparison with quality findings, reported as Excel and HTML.</span>
+        <span>Upload two to five models for a side-by-side comparison with quality findings, reported as Excel and HTML.</span>
       </button>
     </div>
     <div class="legend">
@@ -97,16 +97,20 @@ EX_h_e,1000</pre>
     <div class="warn-box">
       <strong>This can take a long time.</strong> Every model is loaded and analysed on its own (growth, flux variability for blocked reactions,
       exchange essentiality, annotation checks). Genome-scale models can take several minutes each, so a batch of many models may run for
-      a long while. Keep this tab open until it finishes, and start with two or three models if you are unsure.
+      a long while. Keep this tab open until it finishes. At most 5 models can be compared at once; we suggest 3 or fewer.
     </div>
     <p class="muted">Compare several models side by side: growth, size, namespaces, blocked reactions, essential exchanges and more,
       with automatic quality findings. Get the comparison as an Excel workbook and an HTML report.</p>
     <label class="dropzone" id="multiDropzone">
       <input id="multiFiles" type="file" multiple accept=".xml,.sbml,.json,.yml,.yaml,.mat,.gz,.zip,.bz2">
-      <strong>Drop two or more models here</strong>
+      <strong>Drop two to five models here</strong>
       <span>or click to choose several files</span>
     </label>
     <div class="report-options-slot"></div>
+    <div id="multiConfirm" class="warn-box hidden">
+      <strong>This will take a while.</strong> <span id="multiConfirmText"></span>
+      <div class="toolbar"><button type="button" id="multiConfirmGo">Compare anyway</button> <button type="button" class="secondary" id="multiConfirmCancel">Cancel</button></div>
+    </div>
     <button id="multiBtn" disabled>Compare models</button>
     <span id="multiFilename"></span>
     <span id="multiStatus"></span>
@@ -124,7 +128,7 @@ EX_h_e,1000</pre>
     <div class="summary" id="summary"></div>
 
     <div class="app-toolbar">
-      <button id="memotePill" type="button" class="memote-pill hidden" title="Go to the MEMOTE run on the Overview page"></button>
+      <button id="memotePill" type="button" class="memote-pill hidden" title="Go to the MEMOTE tab"></button>
       <button id="reportBtn" type="button">📄 Generate report…</button>
     </div>
 
@@ -142,6 +146,7 @@ EX_h_e,1000</pre>
       <button class="tab" data-tab="reactions">Reactions</button>
       <button class="tab" data-tab="genes">Genes</button>
       <button class="tab" data-tab="objective">Objective</button>
+      <button class="tab" data-tab="memote">MEMOTE</button>
     </nav>
     <nav class="subnav hidden" data-module="diagnostics">
       <button class="tab" data-tab="minmed">Minimal Medium</button>
@@ -167,6 +172,7 @@ EX_h_e,1000</pre>
     <section id="reactions" class="panel"></section>
     <section id="genes" class="panel"></section>
     <section id="objective" class="panel"></section>
+    <section id="memote" class="panel"><h2>MEMOTE quality report</h2><div id="memoteBox"></div></section>
     <section id="minmed" class="panel"></section>
     <section id="exchanges" class="panel"></section>
     <section id="debug" class="panel"></section>

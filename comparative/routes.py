@@ -18,6 +18,9 @@ from comparative.panel import build_report, for_client
 from comparative.settings import QCSections, QCSettings
 from core.shared import ALLOWED, EXPIRY_HOOKS, MODEL_CACHE, clean, load_uploaded_model, touch_model_cache
 
+# Upper limit for the multi-model comparison (each model is analysed in full).
+MAX_MODELS = 5
+
 comparative_bp = Blueprint("comparative", __name__)
 
 MAX_STORED_PANELS = 10
@@ -70,6 +73,8 @@ def api_multi_analyze():
     uploads = [f for f in request.files.getlist("models") if f and f.filename]
     if len(uploads) < 2:
         return jsonify({"error": "Choose at least two model files to compare."}), 400
+    if len(uploads) > MAX_MODELS:
+        return jsonify({"error": f"At most {MAX_MODELS} models can be compared at once."}), 400
     settings, sections = _options()
 
     folder = Path(tempfile.mkdtemp(prefix="gem_inspector_multi_"))
