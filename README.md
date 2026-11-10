@@ -1,191 +1,59 @@
-# GEM / GSMM Inspector
+# GEM Inspector
 
-**GEM Inspector** is a curation and debugging toolkit for genome-scale metabolic models (GEMs).
+**GEM Inspector** is a browser-based toolkit for inspecting, diagnosing and debugging genome-scale metabolic models (GEMs). It is built on [COBRApy](https://github.com/opencobra/cobrapy) and runs locally. It is designed around *inspection rather than repair*: it locates problems, classifies them, shows the evidence and leaves the correction to the curator.
 
-Curating a genome-scale metabolic model is rarely a straightforward process. Models can contain blocked reactions, dead-end metabolites, unexpected essential nutrients, missing pathways, inconsistent annotations, energy-generating cycles, and other issues that are often difficult to identify and trace back to their source. Debugging these problems can also become repetitive, especially when working with multiple models.
+[**Documentation:**](https://gem-inspector.readthedocs.io/en/latest/getting-started/)  installation and solver set-up, user guide, methods, benchmarks and comparison with existing tools.
 
-**GEM Inspector is being developed to make this process easier.** It brings together model inspection, diagnostics, comparative analyses, and debugging tools in one place, with a particular focus on *why* a model behaves the way it does and where curation may be needed.
+> GEM Inspector is under active development. Feedback, bug reports and suggestions are welcome: [open an issue](https://github.com/RamanLab/GEM_Inspector.git/issues) or write to ic43006@imail.iitm.ac.in.
 
-The tool is currently a **work in progress**, and we are actively expanding and improving its functionality based on ongoing use and feedback.
+## What it does
 
-> **Current status:** GEM Inspector currently runs locally. You will need to clone this repository and run the application on your machine - supports windows, linux and mac  (**[Installation & Setup](#installation--setup)**). We are also exploring the possibility of hosting it as an online tool in the future.
+| Module | Contents |
+|---|---|
+| **Overview** | Model statistics, linked metabolite, reaction and gene tables, objective, applied medium, and a [MEMOTE](https://memote.readthedocs.io) quality report in its own tab. |
+| **Diagnostics** | Minimal medium, exchange essentiality, network gaps (dead-end metabolites by the GapFind definition with root and inherited classes, and blocked reactions linked to the dead ends behind them), demand/sink audits, reaction balance with an audit, biomass precursor producibility, and a FROG-style reproducibility report. |
+| **Debugging** | Exchange debugging, an active-flux pathway tracer (editable cofactor list, compartment view, before/after knockout comparison) and pairwise model comparison. |
+| **Annotation and translation** | Identifier namespace detection, annotation coverage, SEED to VMH translation and translation through MetaNetX. |
+| **Reports** | Self-contained HTML reports from any selection of analyses, CSV exports, and a side-by-side comparison of two to five models as HTML and Excel. |
 
-## What can GEM Inspector do currently?
+Supported model formats: SBML (also compressed), JSON, YAML and MATLAB. See the [user guide]([https://gem-inspector.readthedocs.io/en/latest/]) for details of each analysis.
 
-The current version contains **four main modules**, covering different aspects of GEM inspection and curation:
+## Quick start
 
-### 1. Overview
-
-*Model's overall structure and key properties.*
-
-* Model information and metadata
-* Genes, metabolites, reactions, and compartment statistics
-* Objective function and growth information
-* Reaction and metabolite browsing
-* Exchange reactions overview
-* Diet/media selection
-* MEMOTE based quality assessment
-* Minimal medium composition analysis
-
-### 2. Diagnostics & Comparative Analyses
-
-Tools for identifying common structural and functional issues and comparing model behaviour.
-
-* Essential exchange analysis
-* Essential gene and reaction analysis
-* Blocked reaction detection
-* Dead-end metabolite detection
-* Demand and sink audits
-* Network gap analysis
-* FROG reproducibility analysis
-* Model-level reports and CSV exports
-
-### 3. Debugging Toolkit
-
-The debugging module is a major focus of the tool. It is designed to help move beyond simply identifying an issue and instead **trace and investigate what is happening inside the model**.
-
-* Essential exchange debugging
-* Biomass precursor production checks
-* Pathway tracing
-* Before/after knockout comparisons
-* Flux-pathway visualisation
-* Energy-cycle and futile-loop investigation
-* Currency/cofactor-aware pathway tracing
-* Interactive network views
-* Debugging and comparison reports
-* Compare two models: naming conventions, then genes, metabolites, reactions and biomass components shared or unique to each, with copy / CSV export of ids and MetaNetX ids
-
-### 4. Annotation & Translation Toolkit
-
-Tools for working with model annotations and translating information across identifier systems.
-
-* Annotation coverage
-* Identifier and namespace inspection
-* Annotation translation across namespaces
-* Model annotation quality checks
-* SEED to VMH translation using the tables in `data/` (mapped / errors / no available mapping, each exportable), with the translated model and report downloadable as a zip
-
-## Supported Model Formats
-
-GEM Inspector currently accepts:
-
-* SBML / XML
-* JSON
-* YAML
-* MATLAB
-* Supported compressed SBML files
-
-## A few key features
-
-### Essential Exchange Debugging
-
-Essential exchanges can be investigated individually by tracing active-flux pathways from the exchanged metabolite towards biomass.
-
-The tool allows comparison of:
-
-* **Before KO** — the pathway in the original FBA solution
-* **After KO** — the pathway after knocking out the exchange
-
-This helps identify whether the exchange is required because it feeds a specific pathway, whether an alternative route exists, and where the effect of the knockout propagates through the model.
-
-### Pathway Tracer
-
-The general-purpose pathway tracer allows users to trace active metabolic routes between metabolites.
-
-It supports:
-
-* Metabolite- or reaction-based starting points
-* Configurable tracing depth
-* Multiple possible paths
-* Currency/cofactor filtering
-* Text-based pathway views
-* Interactive Cytoscape.js network visualisation
-* Before/after knockout comparisons
-
-### Network Gaps & Audits
-
-The network audit tools provide complementary views of model gaps:
-
-* **Blocked reactions** — reactions unable to carry flux
-* **Dead-end metabolites** — metabolites that can only be produced or only consumed
-* **Demand & sink reactions** — usage and essentiality of demand/sink reactions
-
-These analyses can be independently exported as CSV files.
-
-### Diet & Minimal Medium
-
-GEM Inspector allows users to select or define the medium used for analysis, including:
-
-* Original model bounds
-* Complete media
-* Minimal media
-* Custom diets
-
-A separate minimal-medium analysis can also determine the smallest set of nutrients required to achieve a selected growth level.
-
-### FROG Analysis
-
-The FROG module provides model reproducibility checks through:
-
-* **F** — Flux Variability Analysis
-* **R** — Reaction deletions
-* **O** — Objective value
-* **G** — Gene deletions
-
-Results can be inspected within the application and exported as CSV or a standalone HTML report.
-
-### Reports
-
-Results from multiple modules can be combined into a single self-contained HTML report for documentation, comparison, and sharing.
-
-## Installation
-
-GEM Inspector is currently designed to be run locally.
-
-Clone this repository and follow the installation instructions:
-
-### Installation & Setup
-
-#### macOS / Linux
+Requires Python 3.10 or later.
 
 ```bash
-chmod +x run.sh
-./run.sh
-```
+# macOS / Linux
+chmod +x run.sh && ./run.sh
 
-#### Windows
-
-```bash
+# Windows
 run.bat
 ```
 
-Once the application starts, open:
+The launcher creates a virtual environment, installs [`requirements.txt`](requirements.txt) and starts the application at <http://127.0.0.1:5000>.
 
-```text
-http://127.0.0.1:5000
+### Solvers and cores
+
+GLPK is installed by default. Gurobi or CPLEX (licence required) and HiGHS are detected at start-up:
+
+```bash
+python app.py --solver gurobi --threads 8 --processes 4
 ```
 
-For the required Python environment and dependencies, see [`requirements.txt`](requirements.txt).
+The same settings are available as the environment variables `GEM_SOLVER`, `GEM_THREADS` and `GEM_PROCESSES`. See [Solvers and computing resources]([https://gem-inspector.readthedocs.io/en/latest/getting-started/solvers/]/getting-started/solvers/) for the options and for CPU and memory guidance.
 
-## Acknowledgements
+### Docker
 
-GEM Inspector is built using tools and libraries from the GEM/constraint-based modelling ecosystem, including **COBRApy**, **MEMOTE**, and **Cytoscape.js**, and was developed with the assistance of Claude (Anthropic).
+```bash
+docker build -t gem-inspector .
+docker run -p 8080:8080 gem-inspector
+```
 
-For more information on the implementation and individual analyses, see the documentation and source code in this repository.
-
-
-
-
-
+The image runs gunicorn with a single worker (loaded models are cached in memory) and sets `GEM_HOSTED=1`, which disables saving reports to a server path. The application has no authentication; put it behind an authenticating proxy before exposing it. See [Running and deploying]([https://gem-inspector.readthedocs.io/en/latest/getting-started/running/).
 
 
+## Licence and acknowledgements
 
+Released under the [MIT licence](LICENSE). GEM Inspector builds on COBRApy, MEMOTE, SciPy (HiGHS) and Cytoscape.js, and was developed with the assistance of Claude (Anthropic).
 
-
-
-
-
-
-
-
-
+Developed by Sabdhayini K B, RamanLab, Indian Institute of Technology Madras.
