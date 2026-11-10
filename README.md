@@ -2,7 +2,7 @@
 
 **GEM Inspector** is a browser-based toolkit for inspecting, diagnosing and debugging genome-scale metabolic models (GEMs). It is built on [COBRApy](https://github.com/opencobra/cobrapy) and runs locally. It is designed around *inspection rather than repair*: it locates problems, classifies them, shows the evidence and leaves the correction to the curator.
 
-[**Documentation:**](https://gem-inspector.readthedocs.io/en/latest/)  installation and solver set-up, user guide, methods, and comparison with existing tools.
+[**Read the Docs:**](https://gem-inspector.readthedocs.io/en/latest/)  installation and solver set-up, user guide, methods, and comparison with existing tools.
 
 > GEM Inspector is under active development. Feedback, bug reports and suggestions are welcome: [open an issue](https://github.com/RamanLab/GEM_Inspector/issues) or write to ic43006@imail.iitm.ac.in.
 
@@ -10,11 +10,11 @@
 
 | Module | Contents |
 |---|---|
-| **Overview** | Model statistics, linked metabolite, reaction and gene tables, objective, applied medium, and [MEMOTE](https://memote.readthedocs.io) quality report. |
-| **Diagnostics** | Minimal medium, exchange essentiality, network gaps, demand/sink audits, reaction balance with an audit, biomass precursor producibility, and a FROG-style reproducibility report. |
-| **Debugging** | Exchange debugging, an active-flux pathway tracer (editable cofactor list, compartment view, before/after knockout comparison) and pairwise model comparison. |
-| **Annotation and translation** | Identifier namespace detection, annotation coverage, SEED to VMH translation and translation through MetaNetX. |
-| **Reports** | Self-contained HTML reports from any selection of analyses, CSV exports, and a side-by-side comparison of two to five models as HTML and Excel. |
+| [**Overview**](https://gem-inspector.readthedocs.io/en/latest/guide/overview/) | Model statistics, linked metabolite, reaction and gene tables, objective, applied medium, and [MEMOTE](https://memote.readthedocs.io) quality report and [more...](https://gem-inspector.readthedocs.io/en/latest/guide/overview/) |
+| [**Diagnostics**](https://gem-inspector.readthedocs.io/en/latest/guide/diagnostics/) | Minimal medium, exchange essentiality, network gaps, demand/sink audits, reaction balance with an audit, biomass precursor producibility, and a FROG-style reproducibility report and [more...](https://gem-inspector.readthedocs.io/en/latest/guide/diagnostics/) |
+| [**Debugging**](https://gem-inspector.readthedocs.io/en/latest/guide/debugging/) | Exchange debugging, an active-flux pathway tracer (editable cofactor list, compartment view, before/after knockout comparison) and pairwise model [comparison...](https://gem-inspector.readthedocs.io/en/latest/guide/debugging/) |
+| [**Annotation and translation**](https://gem-inspector.readthedocs.io/en/latest/guide/annotation/) | Identifier namespace detection, annotation coverage, SEED to VMH translation and translation through [MetaNetX...](https://gem-inspector.readthedocs.io/en/latest/guide/annotation/) |
+| [**Reports**](https://gem-inspector.readthedocs.io/en/latest/guide/reports/) | Self-contained HTML reports from any selection of analyses, CSV exports, and a side-by-side comparison of two to five models as HTML [and ...](https://gem-inspector.readthedocs.io/en/latest/guide/reports/) |
 
 Supported model formats: SBML (also compressed), JSON, YAML and MATLAB. See the [user guide]([https://gem-inspector.readthedocs.io/en/latest/]) for details of each analysis.
 
