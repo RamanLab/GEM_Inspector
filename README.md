@@ -2,7 +2,7 @@
 
 **GEM Inspector** is a browser-based toolkit for inspecting, diagnosing and debugging genome-scale metabolic models (GEMs). It is built on [COBRApy](https://github.com/opencobra/cobrapy) and runs locally. It is designed around *inspection rather than repair*: it locates problems, classifies them, shows the evidence and leaves the correction to the curator.
 
-[**Documentation:**](https://gem-inspector.readthedocs.io/en/latest/getting-started/)  installation and solver set-up, user guide, methods, benchmarks and comparison with existing tools.
+[**Documentation:**](https://gem-inspector.readthedocs.io/en/latest/)  installation and solver set-up, user guide, methods, and comparison with existing tools.
 
 > GEM Inspector is under active development. Feedback, bug reports and suggestions are welcome: [open an issue](https://github.com/RamanLab/GEM_Inspector/issues) or write to ic43006@imail.iitm.ac.in.
 
