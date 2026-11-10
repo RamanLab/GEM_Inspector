@@ -4,14 +4,14 @@
 
 [**Documentation:**](https://gem-inspector.readthedocs.io/en/latest/getting-started/)  installation and solver set-up, user guide, methods, benchmarks and comparison with existing tools.
 
-> GEM Inspector is under active development. Feedback, bug reports and suggestions are welcome: [open an issue](https://github.com/RamanLab/GEM_Inspector.git/issues) or write to ic43006@imail.iitm.ac.in.
+> GEM Inspector is under active development. Feedback, bug reports and suggestions are welcome: [open an issue](https://github.com/RamanLab/GEM_Inspector/issues) or write to ic43006@imail.iitm.ac.in.
 
 ## What it does
 
 | Module | Contents |
 |---|---|
-| **Overview** | Model statistics, linked metabolite, reaction and gene tables, objective, applied medium, and a [MEMOTE](https://memote.readthedocs.io) quality report in its own tab. |
-| **Diagnostics** | Minimal medium, exchange essentiality, network gaps (dead-end metabolites by the GapFind definition with root and inherited classes, and blocked reactions linked to the dead ends behind them), demand/sink audits, reaction balance with an audit, biomass precursor producibility, and a FROG-style reproducibility report. |
+| **Overview** | Model statistics, linked metabolite, reaction and gene tables, objective, applied medium, and [MEMOTE](https://memote.readthedocs.io) quality report. |
+| **Diagnostics** | Minimal medium, exchange essentiality, network gaps, demand/sink audits, reaction balance with an audit, biomass precursor producibility, and a FROG-style reproducibility report. |
 | **Debugging** | Exchange debugging, an active-flux pathway tracer (editable cofactor list, compartment view, before/after knockout comparison) and pairwise model comparison. |
 | **Annotation and translation** | Identifier namespace detection, annotation coverage, SEED to VMH translation and translation through MetaNetX. |
 | **Reports** | Self-contained HTML reports from any selection of analyses, CSV exports, and a side-by-side comparison of two to five models as HTML and Excel. |
@@ -56,4 +56,4 @@ The image runs gunicorn with a single worker (loaded models are cached in memory
 
 Released under the [MIT licence](LICENSE). GEM Inspector builds on COBRApy, MEMOTE, SciPy (HiGHS) and Cytoscape.js, and was developed with the assistance of Claude (Anthropic).
 
-Developed by Sabdhayini K B, RamanLab, Indian Institute of Technology Madras.
+Developed by Sabdhayini K B, Computational Systems Biology Lab, Indian Institute of Technology Madras.
