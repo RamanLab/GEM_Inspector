@@ -410,3 +410,28 @@ td.num, th[data-key="lower_bound"], th[data-key="upper_bound"], th[data-key="wt_
 .mini-stat-value .unit { font-size:12px; font-weight:500; color:var(--muted); }
 
 .warn-box button.secondary { background:#fff; color:var(--text); border:1px solid var(--line); }
+
+/* Exchange debugging map */
+.xmap-other { margin:10px 0; }
+.xmap-other summary { cursor:pointer; font-weight:600; color:var(--accent); }
+.xmap-other input[type=text] { margin:8px 0; width:min(420px,100%); }
+.xmap-controls label { display:inline-flex; align-items:center; gap:6px; }
+.xmap-text { margin:12px 0; }
+.xmap-legend { flex-wrap:wrap; }
+.xmap-sq { display:inline-block; width:14px; height:9px; border-radius:3px; border:2px solid #94a3b8; background:#fff; }
+.xmap-sq-primary { border-color:#2563eb; background:#dbeafe; }
+.xmap-sq-active { border-color:#16a34a; background:#dcfce7; }
+.xmap-sq-inactive { border-color:#94a3b8; background:#f1f5f9; }
+.xmap-sq-blocked { border-color:#dc2626; background:#fef2f2; border-style:dashed; }
+
+/* Shared network map and pathway tracer pickers */
+.map-find { min-width:160px; }
+.xmap-sq-lost { border-color:#dc2626; background:#fee2e2; }
+.xmap-sq-gain { border-color:#ca8a04; background:#fef9c3; }
+.xmap-sq-extra { border-color:#7c3aed; background:#fff; border-width:3px; }
+.map-table td { white-space:nowrap; vertical-align:top; }
+.map-table td.map-wrap { max-width:200px; white-space:normal; overflow-wrap:anywhere; }
+.map-table td.map-eq { max-width:340px; min-width:220px; font-size:12px; }
+.trc-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.trc-chip { display:inline-flex; align-items:center; gap:4px; background:#eef2ff; border:1px solid #c7d2fe; border-radius:999px; padding:2px 4px 2px 10px; font-size:12px; }
+.trc-chip button { border:0; background:none; cursor:pointer; padding:0 6px; font-size:14px; color:var(--muted); }

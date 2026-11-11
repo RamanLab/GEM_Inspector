@@ -33,8 +33,8 @@ const MODULE_OVERVIEW = [
     title: "Debugging Toolkit",
     blurb: "Diagnose models that fail to grow or yield implausible predictions.",
     features: [
-      ["Exchange debugging", "Identify the exchange reactions whose relaxation restores growth in a non-growing model.", "available"],
-      ["Pathway tracer", "Trace active-flux routes between metabolites with an editable cofactor list, optional off-route metabolites, a compartment view and before/after knockout comparison.", "available"],
+      ["Exchange debugging", "Map how an exchange's metabolite reaches biomass: the active-flux route plus all reactions within 1–3 hops, active or not, before and after knockout.", "available"],
+      ["Pathway tracer", "Trace routes between any metabolites or reactions (active flux or all possible), with a hop neighbourhood, pickers for extra nodes, a compartment view and before/after knockout comparison.", "available"],
       ["Compare models", "Pairwise matching of reactions, metabolites and genes, including bounds and stoichiometric coefficients.", "available"],
       ["Gap-filling suggestions", "Candidate reactions from a reference database to resolve network gaps.", "planned"],
     ],

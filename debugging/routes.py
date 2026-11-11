@@ -21,15 +21,14 @@ from core.shared import (
     wt_solution as solve_wt,
 )
 from debugging.compare_export import build_html, build_xlsx
+from debugging.exchange_map import build_exchange_map
 from debugging.model_compare import compare_models
-from debugging.tracing import (
-    apply_knockouts,
-    debug_exchange_to_biomass,
-    resolve_knockout_targets,
-    run_pathway_trace,
-)
+from debugging.trace_map import trace_map
+from debugging.tracing import apply_knockouts, debug_exchange_to_biomass, resolve_knockout_targets
 
 debugging_bp = Blueprint("debugging", __name__)
+
+MAX_HOPS = 3  # beyond this the neighbourhood is too large to read
 
 # model_id -> the latest Compare Models result, kept so its Excel/HTML report
 # can be downloaded after the comparison is shown. Dropped when the model expires.
@@ -37,309 +36,153 @@ COMPARISONS = {}
 EXPIRY_HOOKS.append(lambda model_id: COMPARISONS.pop(model_id, None))
 
 
-@debugging_bp.post("/api/debug-exchanges")
-def api_debug_exchanges():
-    """Debug selected essential exchanges by tracing external metabolite ->
-    biomass, both with the exchange active (before KO) and with it
-    reversibly knocked out (after KO), so the two flux traces can be
-    compared side by side."""
+@debugging_bp.post("/api/debug-exchange-map")
+def api_debug_exchange_map():
+    """Map one exchange: the active-flux route from its metabolite to biomass
+    plus the reactions and metabolites within `hops` steps of that route, with
+    the flux before and after knocking the exchange out."""
     data = request.json
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
     model_id = data.get("model_id")
-    exchange_ids = data.get("exchange_ids", [])
-    exclude_trivial = bool(data.get("exclude_trivial_metabolites", True))
+    exchange_id = data.get("exchange_id")
+    hops = min(max(int(data.get("hops", 1)), 0), MAX_HOPS)
+    hide_trivial = bool(data.get("exclude_trivial_metabolites", True))
     currency = currency_bases(data.get("currency_metabolites"))
 
     if not model_id or model_id not in MODEL_CACHE:
         return jsonify({"error": "Model not found or expired. Please re-run the initial analysis."}), 404
-
-    if not exchange_ids:
-        return jsonify({"error": "No exchanges selected"}), 400
-
     touch_model_cache(model_id)
     model, _ = MODEL_CACHE[model_id]
 
     try:
-        biomass_rxn = find_biomass_reaction(model)
-        if not biomass_rxn:
-            return jsonify({"error": "Could not identify biomass reaction"}), 400
+        exch = model.reactions.get_by_id(exchange_id)
+    except KeyError:
+        return jsonify({"error": f"Exchange reaction '{exchange_id}' not found in model"}), 404
+    if not exch.metabolites:
+        return jsonify({"error": "No metabolites found in exchange"}), 400
+    biomass_id = find_biomass_reaction(model)
+    if not biomass_id:
+        return jsonify({"error": "Could not identify biomass reaction"}), 400
 
-        wt_solution = solve_wt(model)
-        wt_growth = max(0.0, safe_float(wt_solution.objective_value) or 0.0)
-
-        # Computed once and reused across every selected exchange's
-        # before/after trace below -- both depend only on model structure,
-        # not on which exchange is knocked out, so recomputing them inside
-        # the loop would waste an O(n) pass per exchange for nothing.
-        reaction_types = classify_reactions(model)
+    try:
+        wt = solve_wt(model)
+        wt_growth = max(0.0, safe_float(wt.objective_value) or 0.0)
+        met = list(exch.metabolites)[0]
         compartment_names = {cid: compartment_display_name(cid, name) for cid, name in model.compartments.items()}
-
-        results = {}
-        for exch_id in exchange_ids:
-            try:
-                exch = model.reactions.get_by_id(exch_id)
-            except KeyError:
-                results[exch_id] = {"error": f"Exchange reaction '{exch_id}' not found in model"}
-                continue
-
-            internal_mets = list(exch.metabolites.keys())
-            if not internal_mets:
-                results[exch_id] = {"error": "No metabolites found in exchange"}
-                continue
-            int_met = internal_mets[0]
-
-            try:
-                # Before KO: trace on the model exactly as analyzed.
-                before = debug_exchange_to_biomass(
-                    model, exch_id, int_met.id, biomass_rxn, solution=wt_solution,
-                    max_flux_paths=5, max_flux_path_depth=15,
-                    exclude_trivial_metabolites=exclude_trivial,
-                    reaction_types=reaction_types, compartment_names=compartment_names,
-                    currency=currency,
-                )
-
-                # After KO: knock the exchange out inside a model context so
-                # the bound change is automatically reverted afterwards, then
-                # re-trace on the perturbed steady state (flux may reroute
-                # through an alternate pathway, or vanish entirely).
-                with model:
-                    exch.knock_out()
-                    after = debug_exchange_to_biomass(
-                        model, exch_id, int_met.id, biomass_rxn,
-                        max_flux_paths=5, max_flux_path_depth=15,
-                        exclude_trivial_metabolites=exclude_trivial,
-                        reaction_types=reaction_types, compartment_names=compartment_names,
-                        currency=currency,
-                    )
-
-                ko_growth = 0.0
-                if after.get("status") == "success":
-                    ko_growth = max(0.0, safe_float(after.get("biomass_flux")) or 0.0)
-                ratio = (ko_growth / wt_growth) if wt_growth > 0 else None
-
-                results[exch_id] = {
-                    "exchange_id": exch_id,
-                    "exchange_name": exch.name,
-                    "internal_metabolite": {"id": int_met.id, "name": clean_metabolite_display_name(int_met)},
-                    "biomass_reaction": biomass_rxn,
-                    "before_ko": before,
-                    "after_ko": after,
-                    "growth_impact": {
-                        "wt_growth": wt_growth,
-                        "ko_growth": ko_growth,
-                        "ko_growth_fraction": ratio,
-                    },
-                }
-            except Exception as exc:
-                results[exch_id] = {"error": str(exc)}
+        before = debug_exchange_to_biomass(
+            model, exchange_id, met.id, biomass_id, solution=wt,
+            max_flux_paths=5, max_flux_path_depth=15, exclude_trivial_metabolites=hide_trivial,
+            reaction_types=classify_reactions(model), compartment_names=compartment_names, currency=currency,
+        )
+        with model:
+            exch.knock_out()
+            ko = model.optimize()
+        ko_growth = max(0.0, safe_float(ko.objective_value) or 0.0) if ko.status == "optimal" else 0.0
+        # With growth lost the solver returns an arbitrary feasible flux vector, so none is shown.
+        ko_flux = ko if ko_growth > 1e-9 else None
 
         return jsonify({
             "status": "success",
-            "biomass_reaction": biomass_rxn,
-            "results": results,
-            "excluded_trivial_metabolites": exclude_trivial,
-            "trivial_metabolite_rule": (
-                "Currency/cofactor metabolites (your editable list; by default H+, water, "
-                "nucleotides, NAD(P)H, FAD(H2), CoA, phosphate, quinones) are excluded "
-                "from traced paths so they don't obscure the pathway-specific route to biomass."
-                if exclude_trivial else
-                "Currency/cofactor metabolites are included in traced paths."
-            ),
+            "exchange_id": exchange_id,
+            "exchange_name": exch.name,
+            "internal_metabolite": {"id": met.id, "name": clean_metabolite_display_name(met)},
+            "biomass_reaction": biomass_id,
+            "growth_impact": {
+                "wt_growth": wt_growth, "ko_growth": ko_growth,
+                "ko_growth_fraction": (ko_growth / wt_growth) if wt_growth > 0 else None,
+            },
+            "paths": before.get("paths", []),
+            "map": build_exchange_map(model, exchange_id, biomass_id, before.get("paths", []), wt, ko_flux,
+                                      currency, hide_trivial, hops, compartment_names),
         })
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
 
-@debugging_bp.post("/api/trace-pathway")
-def api_trace_pathway():
-    """General-purpose pathway tracer (a separate module the user runs on
-    request -- never triggered automatically). Unlike the biomass-specific
-    exchange debugger, the start can be any reaction or metabolite and the
-    target can be any metabolite; "levels" is the BFS depth cap. Reuses the
-    exact same active-flux tracing helpers as debug_exchange_to_biomass.
+def _endpoint(data, key):
+    """(kind, id) from {"type": "metabolite"|"reaction", "id": ...} or None."""
+    item = data.get(key) or {}
+    kind = str(item.get("type", "")).strip().lower()
+    ident = str(item.get("id", "")).strip()
+    return (kind, ident) if kind in ("metabolite", "reaction") and ident else None
 
-    Optionally accepts "knockouts": a list of reaction/metabolite ids (or a
-    comma-separated string). When given, the same start->target trace is
-    run a second time with those reaction(s)/metabolite(s) blocked (inside
-    a `with model:` context, so the uploaded model is never permanently
-    changed), and the result is returned under "knockout" alongside the
-    baseline ("before KO") trace at the top level -- so a single request
-    gives the frontend everything it needs to toggle between the two and
-    highlight what changed.
-    """
+
+def _id_list(raw):
+    if isinstance(raw, str):
+        raw = raw.split(",")
+    return [str(x).strip() for x in (raw or []) if str(x).strip()]
+
+
+def _bounded_int(value, default, low, high):
+    try:
+        return max(low, min(high, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+
+@debugging_bp.post("/api/trace-map")
+def api_trace_map():
+    """Pathway tracer. Routes from a start (metabolite or reaction) to a target
+    (metabolite or reaction), either only through reactions carrying flux
+    ("active") or through any reaction the bounds allow ("all"), drawn with
+    their `hops` neighbourhood. Optional "knockouts" (reaction/metabolite ids)
+    add the flux after the knockout; the model itself is never changed."""
     data = request.json
     if not data:
         return jsonify({"error": "No data provided"}), 400
-
     model_id = data.get("model_id")
-    start_type = (data.get("start_type") or "metabolite").strip().lower()
-    start_id = (data.get("start_id") or "").strip()
-    target_metabolite_id = (data.get("target_metabolite_id") or "").strip()
-    exclude_trivial = bool(data.get("exclude_trivial_metabolites", True))
-    currency = currency_bases(data.get("currency_metabolites"))
-    extra = currency_bases(data.get("extra_metabolites") or [])  # shown one hop off the path
-
-    knockout_raw = data.get("knockouts") or []
-    if isinstance(knockout_raw, str):
-        knockout_raw = knockout_raw.split(",")
-    knockout_ids = [str(x).strip() for x in knockout_raw if str(x).strip()]
-
     if not model_id or model_id not in MODEL_CACHE:
         return jsonify({"error": "Model not found or expired. Please re-run the initial analysis."}), 404
-    if start_type not in ("metabolite", "reaction"):
-        return jsonify({"error": "start_type must be 'metabolite' or 'reaction'"}), 400
-    if not start_id:
-        return jsonify({"error": "A starting reaction or metabolite id is required"}), 400
-    if not target_metabolite_id:
-        return jsonify({"error": "A target metabolite id is required"}), 400
-
-    try:
-        max_levels = max(1, min(100, int(data.get("max_levels", 15))))
-    except (TypeError, ValueError):
-        max_levels = 15
-    try:
-        max_paths = max(1, min(100, int(data.get("max_paths", 10))))
-    except (TypeError, ValueError):
-        max_paths = 10
+    start, target = _endpoint(data, "start"), _endpoint(data, "target")
+    if not start or not target:
+        return jsonify({"error": "Choose both a start and a target (metabolite or reaction)."}), 400
+    mode = "all" if data.get("mode") == "all" else "active"
+    hops = _bounded_int(data.get("hops"), 1, 0, MAX_HOPS)
+    max_levels = _bounded_int(data.get("max_levels"), 15, 1, 100)
+    max_paths = _bounded_int(data.get("max_paths"), 10, 1, 100)
+    hide_trivial = bool(data.get("exclude_trivial_metabolites", True))
+    currency = currency_bases(data.get("currency_metabolites"))
 
     touch_model_cache(model_id)
     model, _ = MODEL_CACHE[model_id]
-
-    try:
-        target_met = model.metabolites.get_by_id(target_metabolite_id)
-    except KeyError:
-        return jsonify({"error": f"Target metabolite '{target_metabolite_id}' not found in model"}), 400
-
-    flux_tolerance = 1e-9
-    # Computed once and reused for both the baseline and (if requested) the
-    # after-KO trace below -- both depend only on model structure, not on
-    # which reactions are knocked out.
-    reaction_types = classify_reactions(model)
+    extra_mets = [m.id for m in (model.metabolites.get_by_id(i) for i in _id_list(data.get("extra_metabolites"))
+                                 if i in model.metabolites)]
+    extra_rxns = [i for i in _id_list(data.get("extra_reactions")) if i in model.reactions]
+    ko_ids = _id_list(data.get("knockouts"))
     compartment_names = {cid: compartment_display_name(cid, name) for cid, name in model.compartments.items()}
 
     try:
-        baseline_solution = solve_wt(model)
-    except Exception as exc:
-        return jsonify({"error": f"FBA failed: {exc}"}), 500
-
-    try:
-        before = run_pathway_trace(
-            model, baseline_solution, start_type, start_id, target_met,
-            max_levels, max_paths, exclude_trivial, flux_tolerance,
-            reaction_types, compartment_names, currency, extra,
-        )
+        wt = solve_wt(model)
+        wt_growth = max(0.0, safe_float(wt.objective_value) or 0.0)
+        ko, ko_info = None, None
+        if ko_ids:
+            targets, not_found = resolve_knockout_targets(model, ko_ids)
+            if not targets:
+                ko_info = {"error": "None of the knockout ids were found: " + ", ".join(not_found),
+                           "not_found": not_found}
+            else:
+                with model:
+                    blocked = apply_knockouts(model, targets)
+                    sol = model.optimize()
+                ko_growth = max(0.0, safe_float(sol.objective_value) or 0.0) if sol.status == "optimal" else 0.0
+                # With growth lost the solver returns an arbitrary flux vector, so none is shown.
+                ko = sol if ko_growth > 1e-9 else None
+                ko_info = {"targets": targets, "not_found": not_found, "blocked_reactions": blocked,
+                           "growth_impact": {"wt_growth": wt_growth, "ko_growth": ko_growth,
+                                             "ko_growth_fraction": (ko_growth / wt_growth) if wt_growth > 0 else None}}
+        result = trace_map(model, wt, ko, start, target, mode, hops, max_levels, max_paths, currency,
+                           hide_trivial, extra_mets, extra_rxns, compartment_names, find_biomass_reaction(model))
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
-
-    if "error" in before:
-        return jsonify({"error": before["error"]}), 400
-
-    before_active_flux = before.pop("active_flux", {})
-
-    response = {
-        "status": "success",
-        "start_type": start_type,
-        "start_id": start_id,
-        "start_metabolites": before["start_metabolites"],
-        "target_metabolite": {
-            "id": target_met.id, "name": clean_metabolite_display_name(target_met),
-            "compartment": target_met.compartment,
-            "compartment_name": compartment_names.get(target_met.compartment, target_met.compartment),
-            "formula": getattr(target_met, "formula", None),
-            "charge": clean(getattr(target_met, "charge", None)),
-        },
-        "num_active_reactions": before["num_active_reactions"],
-        "paths": before["paths"],
-        "growth": before["growth"],
-        "excluded_trivial_metabolites": exclude_trivial,
-        "max_levels": max_levels,
-        "max_paths": max_paths,
-    }
-
-    # Optional comparative knockout: trace the same start->target again with
-    # the requested reaction(s)/metabolite(s) blocked, so the two can be
-    # toggled side by side in the UI.
-    if knockout_ids:
-        resolved_targets, not_found = resolve_knockout_targets(model, knockout_ids)
-        if not resolved_targets:
-            response["knockout"] = {
-                "error": f"None of the requested knockout id(s) were found in the model: {', '.join(not_found)}",
-                "not_found": not_found,
-            }
-        else:
-            try:
-                with model:
-                    blocked_rxn_ids = apply_knockouts(model, resolved_targets)
-                    try:
-                        ko_solution = model.optimize()
-                        ko_fba_error = None
-                    except Exception as exc:
-                        ko_solution = None
-                        ko_fba_error = f"FBA failed after knockout: {exc}"
-
-                    if ko_solution is not None:
-                        after = run_pathway_trace(
-                            model, ko_solution, start_type, start_id, target_met,
-                            max_levels, max_paths, exclude_trivial, flux_tolerance,
-                            reaction_types, compartment_names, currency, extra,
-                        )
-                    else:
-                        after = {"error": ko_fba_error}
-
-                    after_active_flux = after.pop("active_flux", {}) if "error" not in after else {}
-
-                    # Flux comparison, limited to reactions that actually
-                    # appear on the traced paths (before and/or after) --
-                    # this is "the subset that it got", not the whole
-                    # model's flux table, so the payload stays small and
-                    # directly answers "did this KO affect this path".
-                    path_rxn_ids = {r["id"] for p in response["paths"] for r in p["reactions"]}
-                    if "error" not in after:
-                        path_rxn_ids |= {r["id"] for p in after.get("paths", []) for r in p["reactions"]}
-
-                    flux_comparison = {
-                        rid: {
-                            "before_flux": float(before_active_flux.get(rid, 0.0)),
-                            "after_flux": float(after_active_flux.get(rid, 0.0)),
-                            "active_before": rid in before_active_flux,
-                            "active_after": rid in after_active_flux,
-                        }
-                        for rid in sorted(path_rxn_ids)
-                    }
-            except Exception as exc:
-                response["knockout"] = {"error": str(exc), "not_found": not_found}
-            else:
-                if "error" in after:
-                    response["knockout"] = {
-                        "targets": resolved_targets,
-                        "not_found": not_found,
-                        "blocked_reactions": blocked_rxn_ids,
-                        "after_ko": after,
-                    }
-                else:
-                    # Clamp near-zero floating-point solver noise (a lethal
-                    # knockout can solve to e.g. -1e-15 instead of exactly 0)
-                    # up to 0, matching how the rest of the app already
-                    # treats KO growth. Without this, a fully lethal
-                    # knockout could display as "-0%" retained.
-                    wt_growth = max(0.0, safe_float(before["growth"]) or 0.0)
-                    ko_growth = max(0.0, safe_float(after.get("growth")) or 0.0)
-                    response["knockout"] = {
-                        "targets": resolved_targets,
-                        "not_found": not_found,
-                        "blocked_reactions": blocked_rxn_ids,
-                        "after_ko": after,
-                        "growth_impact": {
-                            "wt_growth": wt_growth,
-                            "ko_growth": ko_growth,
-                            "ko_growth_fraction": (ko_growth / wt_growth) if wt_growth > 0 else None,
-                        },
-                        "flux_comparison": flux_comparison,
-                    }
-
-    return jsonify(response)
+    if "error" in result:
+        return jsonify(result), 400
+    result.update({
+        "status": "success", "mode": mode, "growth": wt_growth, "knockout": ko_info,
+        "start": {"type": start[0], "id": start[1]}, "target": {"type": target[0], "id": target[1]},
+    })
+    return jsonify(result)
 
 
 @debugging_bp.post("/api/compare-models")

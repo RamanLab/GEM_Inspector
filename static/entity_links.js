@@ -52,6 +52,12 @@ function gprHtml(rule) {
     /^(and|or)$/i.test(tok) || !entityRow("gene", tok.replace(/&amp;/g, "&")) ? tok : entityLink("gene", tok.replace(/&amp;/g, "&")));
 }
 
+// A reaction equation with every metabolite id turned into a link; coefficients and arrows kept.
+function equationHtml(eq) {
+  if (!eq || !eq.trim()) return "—";
+  return eq.split(/(\s+)/).map(tok => entityRow("met", tok) ? entityLink("met", tok) : escapeHtml(tok)).join("");
+}
+
 // Table-search helper: a query starting with "=" is an exact id match (used
 // when arriving from a link); anything else is a substring search.
 function searchMatches(q, id, haystack) {
