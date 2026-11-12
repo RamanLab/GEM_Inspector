@@ -7,7 +7,7 @@ from pathlib import Path
 from flask import Blueprint, Response, jsonify, request
 from werkzeug.utils import secure_filename
 
-from annotation.naming import clean_metabolite_display_name, compartment_display_name, currency_bases
+from annotation.naming import clean_metabolite_display_name, compartment_display_name, currency_bases, is_trivial_metabolite
 from core.shared import (
     ALLOWED,
     EXPIRY_HOOKS,
@@ -23,6 +23,7 @@ from core.shared import (
 from debugging.compare_export import build_html, build_xlsx
 from debugging.exchange_map import build_exchange_map
 from debugging.model_compare import compare_models
+from debugging.explore import expand, test_metabolites
 from debugging.trace_map import trace_map
 from debugging.tracing import apply_knockouts, debug_exchange_to_biomass, resolve_knockout_targets
 
@@ -183,6 +184,51 @@ def api_trace_map():
         "start": {"type": start[0], "id": start[1]}, "target": {"type": target[0], "id": target[1]},
     })
     return jsonify(result)
+
+
+def _explore_model(data):
+    """(model, error response) for the Explorer endpoints."""
+    model_id = (data or {}).get("model_id")
+    if not model_id or model_id not in MODEL_CACHE:
+        return None, (jsonify({"error": "Model not found or expired. Please re-run the initial analysis."}), 404)
+    touch_model_cache(model_id)
+    return MODEL_CACHE[model_id][0], None
+
+
+@debugging_bp.post("/api/explore-expand")
+def api_explore_expand():
+    """Explorer: one step up and/or down from a metabolite or reaction."""
+    data = request.json
+    model, error = _explore_model(data)
+    if error:
+        return error
+    kind, ident = str(data.get("type", "")), str(data.get("id", ""))
+    direction = data.get("direction") if data.get("direction") in ("up", "down", "both") else "both"
+    pool = model.metabolites if kind == "metabolite" else model.reactions if kind == "reaction" else None
+    if pool is None or ident not in pool:
+        return jsonify({"error": f"'{ident}' was not found in the model."}), 400
+    currency = currency_bases(data.get("currency_metabolites"))
+    trivial = {m.id for m in model.metabolites if data.get("exclude_trivial_metabolites", True) and is_trivial_metabolite(m, currency)}
+    try:
+        names = {cid: compartment_display_name(cid, name) for cid, name in model.compartments.items()}
+        return jsonify(expand(model, solve_wt(model), kind, ident, direction, trivial, names,
+                              classify_reactions(model), find_biomass_reaction(model)))
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@debugging_bp.post("/api/explore-test")
+def api_explore_test():
+    """Explorer: can the network make / use each of these metabolites?"""
+    data = request.json
+    model, error = _explore_model(data)
+    if error:
+        return error
+    ids = [i for i in (data.get("metabolites") or [])[:200] if i in model.metabolites]
+    try:
+        return jsonify({"results": test_metabolites(model, ids)})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
 
 
 @debugging_bp.post("/api/compare-models")

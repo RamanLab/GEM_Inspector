@@ -82,6 +82,15 @@ EX_h_e,1000</pre>
       </details>
     </div>
 
+    <div class="bg-options">
+      <strong>Also run in the background after loading</strong>
+      <span class="muted">Optional. They keep running while you explore, results fill into the tables, and each is computed once and reused by every tab and report. <strong>FVA</strong> solves two linear programs per reaction: seconds for small models, roughly several minutes for genome-scale ones (about 2,000–3,000 reactions) and longer for very large ones. <strong>It cannot be stopped midway</strong>, and the Network Gaps and FROG tabs stay locked until it finishes. An estimate for your model appears once it is loaded.</span>
+      <label><input type="checkbox" id="bgFva" checked> FVA — blocked reactions and flux ranges (Reactions table)</label>
+      <label><input type="checkbox" id="bgDead" checked> Dead-end metabolites (Metabolites table)</label>
+      <label><input type="checkbox" id="bgFrog"> FROG report — FVA at optimum, reaction and gene deletions (slower)</label>
+      <label><input type="checkbox" id="bgMemote"> MEMOTE quality report (slowest)</label>
+    </div>
+
     <button id="analyzeBtn" disabled>Analyze model</button>
     <span id="filename"></span>
     <span id="status"></span>
@@ -126,6 +135,7 @@ EX_h_e,1000</pre>
       <span class="results-status" id="resultsStatus"></span>
     </div>
     <div class="summary" id="summary"></div>
+    <details class="bg-panel hidden" id="bgPanel"></details>
 
     <div class="app-toolbar">
       <button id="memotePill" type="button" class="memote-pill hidden" title="Go to the MEMOTE tab"></button>
@@ -200,8 +210,10 @@ EX_h_e,1000</pre>
 <script src="/static/report_charts.js?v={{ v }}"></script>
 <script src="/static/report_thresholds.js?v={{ v }}"></script>
 <script src="/static/list_export.js?v={{ v }}"></script>
+<script src="/static/background.js?v={{ v }}"></script>
 <script src="/static/network_map.js?v={{ v }}"></script>
 <script src="/static/exchange_map.js?v={{ v }}"></script>
+<script src="/static/explorer.js?v={{ v }}"></script>
 <script src="/static/tracer_map.js?v={{ v }}"></script>
 <script src="/static/compare.js?v={{ v }}"></script>
 <script src="/static/translate.js?v={{ v }}"></script>

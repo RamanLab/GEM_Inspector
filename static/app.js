@@ -108,6 +108,7 @@ analyzeBtn.addEventListener("click", async () => {
     BALANCE_RESULT = null;
     PRECURSOR_RESULT = null;
     resetTracer();
+    resetBackground();
     MINMED_RESULT = null;
     NETGAPS_RESULT = null;
     DSAUDIT_RESULT = null;
@@ -124,6 +125,7 @@ analyzeBtn.addEventListener("click", async () => {
 
     // Phase 2: Stream KO analysis
     streamKOAnalysis(modelId);
+    startBackground(selectedBackgroundTasks());
 
   } catch (err) {
     status.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
@@ -738,6 +740,9 @@ const REACTION_TABLE_COLUMNS = [
   { key: "gene_reaction_rule", label: "GPR" },
   { key: "compartments", label: "Compartment", value: r => (r.compartments || []).map(c => COMP_NAMES[c] || c).join("; ") },
   { key: "wt_flux", label: "WT flux" },
+  { key: "fva_min", label: "FVA min" },
+  { key: "fva_max", label: "FVA max" },
+  { key: "fva_blocked", label: "Blocked (FVA)", value: r => r.fva_blocked === undefined ? "" : r.fva_blocked ? "Yes" : "No" },
   { key: "balance", label: "Balance" },
   { key: "balance_detail", label: "Imbalance / note" },
 ];
@@ -786,6 +791,11 @@ function renderReactions() {
         <option value="unknown">Balance: can't check (no formula)</option>
         <option value="n/a">Balance: not applicable</option>
       </select>
+      <select id="rxnFva" title="Needs the FVA background analysis">
+        <option value="">FVA: all</option>
+        <option value="blocked">FVA: blocked</option>
+        <option value="free">FVA: can carry flux</option>
+      </select>
       <select id="rxnComp">
         <option value="">All compartments</option>
         ${[...new Set(DATA.reactions.flatMap(r => r.compartments || []))].sort().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(COMP_NAMES[c] || c)}</option>`).join("")}
@@ -804,6 +814,8 @@ function renderReactions() {
         <th data-key="gene_reaction_rule">GPR</th>
         <th data-key="compartments">Compartment</th>
         <th data-key="wt_flux">WT flux</th>
+        <th data-key="fva_min" title="Flux range from FVA (objective not constrained). Fills in when the FVA background analysis has run.">FVA min</th>
+        <th data-key="fva_max" title="Flux range from FVA (objective not constrained). Fills in when the FVA background analysis has run.">FVA max</th>
         <th data-key="balance" title="Mass/charge balance of the reaction">Balance</th>
       </tr></thead>
       <tbody id="rxnBody"></tbody>
@@ -817,13 +829,15 @@ function renderReactions() {
     const gpr = $("rxnGpr").value;
     const comp = $("rxnComp").value;
     const bal = $("rxnBalance").value;
+    const fvaF = $("rxnFva").value;
     const rows = filtered ? filtered : DATA.reactions.filter(r =>
       searchMatches(q, r.id, `${r.id} ${r.metanetx_id || ""} ${r.name} ${r.equation || ""} ${r.subsystem} ${r.gene_reaction_rule}`) &&
       (!type || r.type === type) && (!sub || r.subsystem === sub) &&
       (!mapped || (mapped === "mapped" ? !!r.metanetx_id : !r.metanetx_id)) &&
       (!gpr || (gpr === "has" ? !!(r.gene_reaction_rule || "").trim() : !(r.gene_reaction_rule || "").trim())) &&
       (!comp || (r.compartments || []).includes(comp)) &&
-      (!bal || (r.balance || "n/a") === bal)
+      (!bal || (r.balance || "n/a") === bal) &&
+      (!fvaF || (fvaF === "blocked" ? r.fva_blocked === true : r.fva_blocked === false))
     );
     rxnCurrentRows = rows;
     const bar = $("rxnBalanceBar");
@@ -837,7 +851,7 @@ function renderReactions() {
     }
     $("rxnCount").textContent = `${rows.length} / ${DATA.reactions.length}`;
     $("rxnBody").innerHTML = rows.map(r => `<tr class="${r.metanetx_id ? "" : "row-unmapped"}" title="${r.metanetx_id ? "" : "Not mapped to MetaNetX -- see the warning in the Overview tab"}">
-      <td><strong>${escapeHtml(r.id)}</strong></td>
+      <td><strong>${escapeHtml(r.id)}</strong>${r.fva_blocked ? ' <span class="badge bad" title="Cannot carry flux under the current bounds (FVA)">blocked</span>' : ""}</td>
       <td>${escapeHtml(r.metanetx_id || "—")}</td>
       <td class="wrap">${escapeHtml(r.name)}</td>
       <td class="wrap ent-eq">${equationHtml(r.equation)}</td>
@@ -845,11 +859,13 @@ function renderReactions() {
       <td class="wrap">${gprHtml(r.gene_reaction_rule)}</td>
       <td>${compartmentBadges(r.compartments)}</td>
       <td class="num">${fmt(r.wt_flux)}</td>
+      <td class="num">${r.fva_min === undefined ? "—" : fmt(r.fva_min)}</td>
+      <td class="num">${r.fva_max === undefined ? "—" : fmt(r.fva_max)}</td>
       <td>${balanceBadge(r)}</td>
     </tr>`).join("");
     $("rxnBody").querySelectorAll(".bal-link").forEach(a => a.addEventListener("click", () => openBalanceDiagnostics(a.dataset.rxn)));
   };
-  ["rxnSearch","rxnType","rxnSubsystem","rxnMapped","rxnGpr","rxnComp","rxnBalance"].forEach(id => $(id).addEventListener("input", () => redraw()));
+  ["rxnSearch","rxnType","rxnSubsystem","rxnMapped","rxnGpr","rxnComp","rxnBalance","rxnFva"].forEach(id => $(id).addEventListener("input", () => redraw()));
   redraw();
   setTimeout(() => makeSortable("rxnTable", DATA.reactions, redraw), 0);
   attachTableTools("rxnTable", $("reactions").querySelector(".toolbar"), REACTION_TABLE_COLUMNS, () => rxnCurrentRows, "reactions");
@@ -866,6 +882,7 @@ const METABOLITE_TABLE_COLUMNS = [
   { key: "produced_count", label: "# Produced in" },
   { key: "consumed_count", label: "# Consumed in" },
   { key: "reversible_count", label: "# Reversible" },
+  { key: "dead_end", label: "Dead end", value: m => m.dead_end || "" },
   { key: "reactions", label: "Reactions", value: m => (m.reactions || []).join("; ") },
 ];
 
@@ -882,6 +899,11 @@ function renderMetabolites() {
         <option value="mapped">MetaNetX: mapped only</option>
         <option value="unmapped">MetaNetX: unmapped only</option>
       </select>
+      <select id="metDead" title="Needs the dead-end background analysis">
+        <option value="">Dead ends: all</option>
+        <option value="yes">Dead ends only</option>
+        <option value="no">Not dead ends</option>
+      </select>
       <span id="metCount"></span>
     </div>
     <div class="table-wrap"><table id="metTable">
@@ -896,6 +918,7 @@ function renderMetabolites() {
         <th data-key="produced_count"># Produced in</th>
         <th data-key="consumed_count"># Consumed in</th>
         <th data-key="reversible_count"># Reversible</th>
+        <th data-key="dead_end" title="Dead-end class from GapFind. Fills in when the dead-end background analysis has run.">Dead end</th>
         <th>Reactions</th>
       </tr></thead>
       <tbody id="metBody"></tbody>
@@ -905,7 +928,9 @@ function renderMetabolites() {
     const q = $("metSearch").value.toLowerCase();
     const comp = $("metComp").value;
     const mapped = $("metMapped").value;
+    const deadF = $("metDead").value;
     const rows = filtered ? filtered : DATA.metabolites.filter(m =>
+      (!deadF || (deadF === "yes" ? !!m.dead_end : m.dead_end === null)) &&
       searchMatches(q, m.id, `${m.id} ${m.metanetx_id || ""} ${m.name} ${m.formula}`) &&
       (!comp || m.compartment === comp) &&
       (!mapped || (mapped === "mapped" ? !!m.metanetx_id : !m.metanetx_id))
@@ -922,10 +947,11 @@ function renderMetabolites() {
       <td class="num">${m.produced_count ?? 0}</td>
       <td class="num">${m.consumed_count ?? 0}</td>
       <td class="num">${m.reversible_count ?? 0}</td>
+      <td>${m.dead_end ? `<span class="badge bad">${escapeHtml(m.dead_end)}</span>` : m.dead_end === null ? "—" : ""}</td>
       <td>${metReactionLinks(m)}</td>
     </tr>`).join("");
   };
-  ["metSearch","metComp","metMapped"].forEach(id => $(id).addEventListener("input", () => redraw()));
+  ["metSearch","metComp","metMapped","metDead"].forEach(id => $(id).addEventListener("input", () => redraw()));
   redraw();
   setTimeout(() => makeSortable("metTable", DATA.metabolites, redraw), 0);
   attachTableTools("metTable", $("metabolites").querySelector(".toolbar"), METABOLITE_TABLE_COLUMNS, () => metCurrentRows, "metabolites");

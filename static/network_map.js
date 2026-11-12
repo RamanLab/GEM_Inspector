@@ -18,7 +18,20 @@ const LANE_RANK = { c: 0, p: 1, e: 2 };
 function mapReactionState(r, mode) {
   const flux = mode === "after" ? (r.flux_after || 0) : r.flux_before;
   if (Math.abs(flux) > FLUX_EPS) return { state: "active", flux };
-  return { state: r.blocked ? "blocked" : "inactive", flux: 0 };
+  return { state: r.blocked || r.fva_blocked ? "blocked" : "inactive", flux: 0 };
+}
+
+// The edges of one reaction node. Direction follows the flux when there is one, otherwise the way the
+// bounds let it run (reverse-only reactions point backwards); two heads when it can run both ways.
+function mapReactionEdges(r, state, flux) {
+  const dir = r.direction === undefined ? (r.reversible ? 0 : 1) : r.direction;
+  return r.mets.map(([mid, coeff]) => {
+    const substrate = state === "active" ? (coeff < 0) === (flux > 0) : dir === -1 ? coeff > 0 : coeff < 0;
+    return {
+      data: { id: `${r.id}|${mid}`, source: substrate ? mid : r.id, target: substrate ? r.id : mid, state, coeff },
+      classes: `${state}${r.primary ? " primary" : ""}${state !== "active" && dir === 0 ? " both" : ""}`,
+    };
+  });
 }
 
 function mapPathsHtml(paths, title) {
@@ -33,9 +46,36 @@ function mapPathsHtml(paths, title) {
 const MAP_COLUMNS = [
   ["Reaction", r => r.id], ["Name", r => r.name], ["Equation", r => r.equation], ["Subsystem", r => r.subsystem],
   ["Hop", r => r.primary ? "route" : r.extra ? "added" : r.hop], ["Status", (r, s) => s.state], ["Flux", (r, s) => s.flux],
-  ["Lower bound", r => r.lower_bound], ["Upper bound", r => r.upper_bound], ["Genes", r => r.genes],
+  ["Lower bound", r => r.lower_bound], ["Upper bound", r => r.upper_bound],
+  ["FVA min", r => r.fva ? r.fva[0] : ""], ["FVA max", r => r.fva ? r.fva[1] : ""], ["Genes", r => r.genes],
 ];
-const MAP_HOP_COL = 4, MAP_FLUX_COL = 6;
+const MAP_HOP_COL = 4, MAP_FLUX_COL = 6;  // keep in step with MAP_COLUMNS
+
+function mapAttachTooltips(cy) {
+  const metHtml = d => `<div class="tooltip-title">${escapeHtml(d.name || d.id)}</div>
+    <div class="tooltip-row"><span class="tooltip-label">ID</span><code>${escapeHtml(d.id)}</code></div>
+    <div class="tooltip-row"><span class="tooltip-label">Compartment</span>${escapeHtml(d.compartment_name || d.compartment || "—")}</div>
+    <div class="tooltip-row"><span class="tooltip-label">Formula</span>${escapeHtml(d.formula || "—")}</div>
+    ${d.dead_end ? `<div class="tooltip-row"><span class="tooltip-label">Dead end</span>${escapeHtml(d.dead_end)}</div>` : ""}`;
+  const rxnHtml = d => `<div class="tooltip-title">${escapeHtml(d.id)}${d.name ? ` — ${escapeHtml(d.name)}` : ""}</div>
+    <div class="tooltip-row"><span class="tooltip-label">Reaction</span><code>${escapeHtml(d.equation || "—")}</code></div>
+    <div class="tooltip-row"><span class="tooltip-label">Status</span>${escapeHtml(d.state)} (flux ${fmt(d.flux)})</div>
+    <div class="tooltip-row"><span class="tooltip-label">Bounds</span>[${fmt(d.lower_bound, 2)}, ${fmt(d.upper_bound, 2)}]</div>
+    ${d.fva ? `<div class="tooltip-row"><span class="tooltip-label">FVA range</span>[${fmt(d.fva[0], 4)}, ${fmt(d.fva[1], 4)}]${d.fva_blocked ? " — blocked" : ""}</div>` : ""}
+    ${d.essential ? '<div class="tooltip-row"><span class="tooltip-label">Essential</span>Knocking it out stops growth</div>' : ""}
+    <div class="tooltip-row"><span class="tooltip-label">Subsystem</span>${escapeHtml(d.subsystem || "—")}</div>
+    <div class="tooltip-row"><span class="tooltip-label">GPR</span>${escapeHtml(d.genes || "—")}</div>
+    ${d.hidden_mets && d.hidden_mets.length ? `<div class="tooltip-row"><span class="tooltip-label">Also uses</span>${escapeHtml(d.hidden_mets.join(", "))}</div>` : ""}`;
+  cy.on("mouseover", "node", ev => {
+    const o = ev.originalEvent;
+    showTooltip((ev.target.data("kind") === "rxn" ? rxnHtml : metHtml)(ev.target.data()), o ? o.clientX : 0, o ? o.clientY : 0);
+  });
+  cy.on("mousemove", "node", ev => { const o = ev.originalEvent; if (o) positionTooltip(o.clientX, o.clientY); });
+  cy.on("mouseout", "node", () => hideTooltip());
+  cy.on("pan zoom drag", () => hideTooltip());
+  cy.container().addEventListener("mouseleave", () => hideTooltip());
+}
+
 
 function createNetworkMap(p) {
   const S = { cy: null, mode: "before", data: null, opts: null, root: null };
@@ -54,6 +94,13 @@ function createNetworkMap(p) {
         <select id="${p}Layout"><option value="cose">Layout: clustered</option><option value="breadthfirst">Layout: tree</option>
           ${lanes ? '<option value="lanes">Layout: compartment lanes</option>' : ""}</select>
         <input type="text" id="${p}Find" placeholder="Find a node…" class="map-find">
+        <span class="map-zoom">
+          <button type="button" class="secondary" data-act="in" title="Zoom in">+</button>
+          <button type="button" class="secondary" data-act="out" title="Zoom out">−</button>
+          <button type="button" class="secondary" data-act="fit" title="Fit the whole map in view">Fit</button>
+          <button type="button" class="secondary" data-act="reset" title="Redo the layout and fit">Reset</button>
+          <button type="button" class="secondary" data-act="png" title="Save the map as an image">PNG</button>
+        </span>
         <span id="${p}Count" class="stoich"></span>
       </div>
       <div class="tracer-cy-wrap"><div id="${p}Cy" class="tracer-cy-container"></div></div>
@@ -62,7 +109,8 @@ function createNetworkMap(p) {
         <span><i class="xmap-sq xmap-sq-primary"></i> Route reaction</span>
         <span><i class="xmap-sq xmap-sq-active"></i> Other active</span>
         <span><i class="xmap-sq xmap-sq-inactive"></i> Inactive</span>
-        <span><i class="xmap-sq xmap-sq-blocked"></i> Blocked (both bounds 0)</span>
+        <span><i class="xmap-sq xmap-sq-blocked"></i> Blocked (bounds, or FVA when run)</span>
+        <span><i class="tracer-dot tracer-dot-dead"></i> Dead-end metabolite (when computed)</span>
         ${opts.hasKo ? '<span><i class="xmap-sq xmap-sq-lost"></i> Active → inactive after KO</span><span><i class="xmap-sq xmap-sq-gain"></i> Inactive → active after KO</span>' : ""}
         <span class="stoich">Two-headed arrow: reversible reaction with no flux. Hover for details.</span>
       </div>
@@ -76,6 +124,7 @@ function createNetworkMap(p) {
     el("ShowInactive").addEventListener("change", applyVisibility);
     el("Layout").addEventListener("change", layout);
     el("Find").addEventListener("input", highlight);
+    root.querySelectorAll(".map-zoom button").forEach(b => b.addEventListener("click", () => zoomAction(b.dataset.act)));
     el("Biomass").addEventListener("change", drawTable);
     el("Csv").addEventListener("click", downloadCsv);
     if (opts.koNote) { const a = root.querySelector(`input[name="${p}Mode"][value="after"]`); if (a) a.title = opts.koNote; }
@@ -92,28 +141,21 @@ function createNetworkMap(p) {
     const color = c => LANE_COLORS[comps.indexOf(c) % LANE_COLORS.length];
     const els = [];
     m.metabolites.forEach(x => els.push({
-      data: Object.assign({}, x, { label: x.name || x.id, kind: "met", laneColor: color(x.compartment) }), classes: x.role }));
+      data: Object.assign({}, x, { label: x.name || x.id, kind: "met", laneColor: color(x.compartment) }),
+      classes: x.role + (x.dead_end ? " deadend" : "") }));
     m.reactions.forEach(r => {
       const { state, flux } = mapReactionState(r, mode);
       const wasActive = Math.abs(r.flux_before) > FLUX_EPS;
       const delta = mode !== "after" ? "" : wasActive && state !== "active" ? "lost" : !wasActive && state === "active" ? "gain" : "";
       const cls = [state, r.primary ? "primary" : "", r.extra ? "extra" : "", delta, mode === "after" && knocked.has(r.id) ? "knocked" : ""].join(" ");
       els.push({ data: Object.assign({}, r, { label: r.id, kind: "rxn", state, flux }), classes: cls });
-      r.mets.forEach(([mid, coeff]) => {
-        // Direction follows the flux when there is one, otherwise the written equation.
-        const substrate = state === "active" ? (coeff < 0) === (flux > 0) : coeff < 0;
-        const both = state !== "active" && r.reversible;
-        els.push({
-          data: { id: `${r.id}|${mid}`, source: substrate ? mid : r.id, target: substrate ? r.id : mid, state, coeff },
-          classes: `${state}${r.primary ? " primary" : ""}${both ? " both" : ""}`,
-        });
-      });
+      els.push(...mapReactionEdges(r, state, flux));
     });
     if (S.cy) S.cy.destroy();
     S.cy = cytoscape({ container: el("Cy"), elements: els, wheelSensitivity: 0.25, maxZoom: 2.5, style: MAP_STYLE });
     layout();
     applyVisibility();
-    attachTooltips(S.cy);
+    mapAttachTooltips(S.cy);
   }
 
   function layout() {
@@ -153,6 +195,22 @@ function createNetworkMap(p) {
     highlight();
   }
 
+  function zoomAction(act) {
+    const cy = S.cy;
+    if (!cy) return;
+    const mid = { x: cy.width() / 2, y: cy.height() / 2 };
+    if (act === "in") cy.zoom({ level: cy.zoom() * 1.3, renderedPosition: mid });
+    else if (act === "out") cy.zoom({ level: cy.zoom() / 1.3, renderedPosition: mid });
+    else if (act === "fit") cy.fit(cy.elements().not(".xmap-hidden"), 24);
+    else if (act === "reset") { el("Find").value = ""; layout(); applyVisibility(); }
+    else if (act === "png") {
+      const a = document.createElement("a");
+      a.href = cy.png({ full: true, scale: 2, bg: "#ffffff" });
+      a.download = `${S.opts.csvName || p}_map.png`;
+      a.click();
+    }
+  }
+
   function highlight() {
     const q = el("Find").value.trim().toLowerCase(), cy = S.cy;
     cy.nodes().removeClass("hit");
@@ -160,28 +218,6 @@ function createNetworkMap(p) {
     const hits = cy.nodes().not(".xmap-hidden").filter(n => `${n.data("id")} ${n.data("name") || ""}`.toLowerCase().includes(q));
     hits.addClass("hit");
     if (hits.length) cy.animate({ fit: { eles: hits, padding: 80 }, duration: 150 });
-  }
-
-  function attachTooltips(cy) {
-    const metHtml = d => `<div class="tooltip-title">${escapeHtml(d.name || d.id)}</div>
-      <div class="tooltip-row"><span class="tooltip-label">ID</span><code>${escapeHtml(d.id)}</code></div>
-      <div class="tooltip-row"><span class="tooltip-label">Compartment</span>${escapeHtml(d.compartment_name || d.compartment || "—")}</div>
-      <div class="tooltip-row"><span class="tooltip-label">Formula</span>${escapeHtml(d.formula || "—")}</div>`;
-    const rxnHtml = d => `<div class="tooltip-title">${escapeHtml(d.id)}${d.name ? ` — ${escapeHtml(d.name)}` : ""}</div>
-      <div class="tooltip-row"><span class="tooltip-label">Reaction</span><code>${escapeHtml(d.equation || "—")}</code></div>
-      <div class="tooltip-row"><span class="tooltip-label">Status</span>${escapeHtml(d.state)} (flux ${fmt(d.flux)})</div>
-      <div class="tooltip-row"><span class="tooltip-label">Bounds</span>[${fmt(d.lower_bound, 2)}, ${fmt(d.upper_bound, 2)}]</div>
-      <div class="tooltip-row"><span class="tooltip-label">Subsystem</span>${escapeHtml(d.subsystem || "—")}</div>
-      <div class="tooltip-row"><span class="tooltip-label">GPR</span>${escapeHtml(d.genes || "—")}</div>
-      ${d.hidden_mets && d.hidden_mets.length ? `<div class="tooltip-row"><span class="tooltip-label">Also uses</span>${escapeHtml(d.hidden_mets.join(", "))}</div>` : ""}`;
-    cy.on("mouseover", "node", ev => {
-      const o = ev.originalEvent;
-      showTooltip((ev.target.data("kind") === "rxn" ? rxnHtml : metHtml)(ev.target.data()), o ? o.clientX : 0, o ? o.clientY : 0);
-    });
-    cy.on("mousemove", "node", ev => { const o = ev.originalEvent; if (o) positionTooltip(o.clientX, o.clientY); });
-    cy.on("mouseout", "node", () => hideTooltip());
-    cy.on("pan zoom drag", () => hideTooltip());
-    cy.container().addEventListener("mouseleave", () => hideTooltip());
   }
 
   function rows() {
@@ -194,7 +230,7 @@ function createNetworkMap(p) {
 
   function drawTable() {
     el("Table").innerHTML = `<div class="table-scroll"><table class="map-table"><thead><tr>${MAP_COLUMNS.map(([h]) => `<th>${h}</th>`).join("")}</tr></thead>
-      <tbody>${rows().map(r => `<tr>${r.map((v, i) => `<td class="${i === 2 ? "map-eq map-wrap" : [1, 3, 9].includes(i) ? "map-wrap" : ""}">${escapeHtml(i === MAP_FLUX_COL ? fmt(v) : v ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+      <tbody>${rows().map(r => `<tr>${r.map((v, i) => `<td class="${i === 2 ? "map-eq map-wrap" : [1, 3, 11].includes(i) ? "map-wrap" : ""}">${escapeHtml(i === MAP_FLUX_COL ? fmt(v) : v ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
   }
 
   function downloadCsv() {
@@ -227,7 +263,12 @@ const MAP_STYLE = [
   { selector: "node[kind='rxn'].blocked", style: { "background-color": "#fef2f2", "border-color": "#dc2626", "border-style": "dashed", color: "#b91c1c" } },
   { selector: "node[kind='rxn'].lost", style: { "background-color": "#fee2e2", "border-color": "#dc2626", "border-width": 3 } },
   { selector: "node[kind='rxn'].gain", style: { "background-color": "#fef9c3", "border-color": "#ca8a04", "border-width": 3 } },
+  { selector: "node.deadend", style: { "border-style": "dashed", "border-color": "#dc2626" } },
   { selector: "node.knocked", style: { "border-color": "#dc2626", "border-width": 4, "border-style": "double" } },
+  { selector: "node.mk-yes", style: { "background-color": "#bbf7d0" } },
+  { selector: "node.mk-no", style: { "background-color": "#fecaca", "border-color": "#dc2626" } },
+  { selector: "node.seed", style: { "background-color": "#2563eb", width: 32, height: 32 } },
+  { selector: "node:selected", style: { "overlay-color": "#2563eb", "overlay-opacity": 0.25, "overlay-padding": 8 } },
   { selector: "node.hit", style: { "overlay-color": "#facc15", "overlay-opacity": 0.5, "overlay-padding": 8 } },
   { selector: "edge", style: { width: 1.5, "line-color": "#cbd5e1", "target-arrow-color": "#cbd5e1", "target-arrow-shape": "triangle", "curve-style": "bezier" } },
   { selector: "edge.active", style: { width: 3, "line-color": "#16a34a", "target-arrow-color": "#16a34a" } },

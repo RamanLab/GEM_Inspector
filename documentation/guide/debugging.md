@@ -32,6 +32,20 @@ The tracer finds routes between a start and a target, each of which can be a **m
 
 The map offers clustered, tree and **compartment lanes** layouts, a *Find a node* box, hover cards, and a reactions table with CSV download. The table leaves out the biomass reaction unless *Include biomass reaction* is ticked. The method is described in [Pathway tracing](../methods/tracing.md).
 
+### Explore: draw your own graph
+
+The *Explore* sub-tab of the tracer is for the case where you do not yet know the route. Start from any metabolite or reaction and grow the graph one step at a time: click a node and choose **Upstream** (reactions that can make a metabolite, or what makes a reaction's substrates), **Downstream** (reactions that can use it) or **Both**; a double-click expands both ways. Direction is judged from the reaction bounds, so a reversible reaction counts both ways. Cofactors stay hidden unless you add them yourself.
+
+| Feature | What it shows |
+|---|---|
+| Node colours and shapes | Reactions are active, inactive or blocked (bounds, or FVA when it has been run); a lock marks an essential reaction; dead-end metabolites (when that analysis has run) get a dashed red outline. Arrows follow the flux, or the direction the bounds allow. |
+| Test metabolites | For every metabolite drawn, a temporary demand reaction (can the network make it?) and a temporary supply (can it use it?) are tested under the current bounds, without changing the model. Green means yes, red means no. |
+| Trace the break | Expands every unmakeable metabolite upstream (or every unusable one downstream), retests the new metabolites and repeats for the chosen number of rounds. It stops where metabolites can be made again, so the red metabolites left are the first ones on each branch that cannot be made. *Show only the problem area* hides everything else. |
+| Details panel | Click a node for its equation, bounds, flux, FVA range and a one-line diagnosis, for example that nothing in the model produces a metabolite. |
+| Output | Find a node, zoom, PNG, and a CSV of every node drawn with its diagnostics. |
+
+The test asks whether the network *can* make or use a metabolite at all; it does not say which reactions to add. Each expansion adds at most 40 reactions (active ones first).
+
 ## Compare models
 
 Two models are compared by naming convention first (metabolite and reaction namespaces, compartment tags), then by genes, metabolites, reactions and biomass components, listed as shared, only in the first or only in the second. Reactions are also paired by equation, and differences in bounds and coefficients are reported. Each list can be copied or exported as CSV with MetaNetX identifiers alongside the model identifiers.

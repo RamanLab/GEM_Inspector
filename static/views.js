@@ -34,7 +34,7 @@ const MODULE_OVERVIEW = [
     blurb: "Diagnose models that fail to grow or yield implausible predictions.",
     features: [
       ["Exchange debugging", "Map how an exchange's metabolite reaches biomass: the active-flux route plus all reactions within 1–3 hops, active or not, before and after knockout.", "available"],
-      ["Pathway tracer", "Trace routes between any metabolites or reactions (active flux or all possible), with a hop neighbourhood, pickers for extra nodes, a compartment view and before/after knockout comparison.", "available"],
+      ["Pathway tracer", "Trace routes between any metabolites or reactions (active flux or all possible), with a hop neighbourhood, pickers for extra nodes, a compartment view and before/after knockout comparison; plus an Explore mode to draw your own graph, test which metabolites can be made, and trace a break upstream.", "available"],
       ["Compare models", "Pairwise matching of reactions, metabolites and genes, including bounds and stoichiometric coefficients.", "available"],
       ["Gap-filling suggestions", "Candidate reactions from a reference database to resolve network gaps.", "planned"],
     ],

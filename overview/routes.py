@@ -11,7 +11,7 @@ from werkzeug.utils import secure_filename
 
 from core.shared import ALLOWED, MODEL_CACHE, load_uploaded_model, safe_float, store_original_file, touch_model_cache, wt_solution as solve_wt
 from diagnostics.diet import apply_diet_to_model, parse_diet_file
-from overview import memote_jobs
+from overview import background, memote_jobs
 from overview.analysis import analyze_model, quick_analyze, stream_ko_analysis
 
 overview_bp = Blueprint("overview", __name__)
@@ -180,3 +180,44 @@ def api_memote_report(model_id):
 @overview_bp.get("/api/memote-selftest")
 def api_memote_selftest():
     return jsonify(memote_jobs.selftest())
+
+
+# ---------------------------------------------------------------------------
+# Background analyses (dead ends, FVA, FROG, MEMOTE; see overview/background.py)
+# ---------------------------------------------------------------------------
+@overview_bp.post("/api/background/<model_id>/start")
+def api_background_start(model_id):
+    if model_id not in MODEL_CACHE:
+        return jsonify({"error": "Model not found or expired. Please re-analyze the model."}), 404
+    touch_model_cache(model_id)
+    names = (request.json or {}).get("tasks") or []
+    return jsonify(background.start(model_id, names))
+
+
+@overview_bp.get("/api/background/<model_id>/status")
+def api_background_status(model_id):
+    if model_id not in MODEL_CACHE:
+        return jsonify({"error": "Model not found or expired."}), 404
+    touch_model_cache(model_id)
+    return jsonify(background.state(model_id))
+
+
+@overview_bp.post("/api/background/<model_id>/stop")
+def api_background_stop(model_id):
+    return jsonify(background.stop(model_id))
+
+
+@overview_bp.get("/api/background/<model_id>/estimates")
+def api_background_estimates(model_id):
+    if model_id not in MODEL_CACHE:
+        return jsonify({"error": "Model not found or expired."}), 404
+    return jsonify({"estimates": background.estimate_for(model_id)})
+
+
+@overview_bp.get("/api/background/<model_id>/results")
+def api_background_results(model_id):
+    """FVA ranges / blocked reactions / dead-end classes, from whatever has been computed so far."""
+    if model_id not in MODEL_CACHE:
+        return jsonify({"error": "Model not found or expired."}), 404
+    touch_model_cache(model_id)
+    return jsonify(background.results(MODEL_CACHE[model_id][0]))

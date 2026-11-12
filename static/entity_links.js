@@ -93,14 +93,14 @@ function reactionCardHtml(r) {
     <div class="ent-eq">${escapeHtml(r.equation || "")}</div>
     ${cardRow("Type", escapeHtml(r.type))}${cardRow("Subsystem", escapeHtml(r.subsystem))}
     ${cardRow("Bounds", `${fmt(r.lower_bound, 6)} … ${fmt(r.upper_bound, 6)}`)}
-    ${cardRow("WT flux", fmt(r.wt_flux))}${cardRow("GPR", escapeHtml(r.gene_reaction_rule))}`;
+    ${cardRow("WT flux", fmt(r.wt_flux))}${r.fva_min === undefined ? "" : cardRow("FVA range", `${fmt(r.fva_min)} … ${fmt(r.fva_max)}${r.fva_blocked ? " (blocked)" : ""}`)}${cardRow("GPR", escapeHtml(r.gene_reaction_rule))}`;
 }
 
 function metaboliteCardHtml(m) {
   return `<div class="ent-title">${escapeHtml(m.id)}</div>
     <div>${escapeHtml(m.name || "")}</div>
     ${cardRow("Formula", escapeHtml(m.formula))}${cardRow("Charge", escapeHtml(m.charge))}
-    ${cardRow("Compartment", escapeHtml(COMP_NAMES[m.compartment] || m.compartment))}
+    ${cardRow("Compartment", escapeHtml(COMP_NAMES[m.compartment] || m.compartment))}${cardRow("Dead end", escapeHtml(m.dead_end))}
     ${cardRow("Reactions", `${m.reaction_count ?? 0} (${m.produced_count ?? 0} produced, ${m.consumed_count ?? 0} consumed, ${m.reversible_count ?? 0} reversible)`)}`;
 }
 

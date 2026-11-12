@@ -5,14 +5,37 @@ reaction within `hops` reaction steps, active or not, and returns plain records
 for the browser to draw. Currency/cofactor metabolites (`trivial_ids`) are left
 out of the graph and only listed per reaction.
 """
+from core.memo import recall
 from annotation.naming import clean_metabolite_display_name
 from core.shared import safe_float, subsystem_value
+from diagnostics.gapfind import CLASS_LABELS
 
 FLUX_TOLERANCE = 1e-9
 
 
-def _met_record(met, role, compartment_names):
+def effective_direction(lb, ub, tol=FLUX_TOLERANCE):
+    """Which way the bounds let a reaction run: 1 forward only, -1 reverse only,
+    0 both ways, None blocked."""
+    can_fwd, can_rev = (ub or 0) > tol, (lb or 0) < -tol
+    return 0 if can_fwd and can_rev else 1 if can_fwd else -1 if can_rev else None
+
+
+def model_tolerance(rxn):
+    return rxn.model.tolerance
+
+
+def _background_info(model):
+    """FVA ranges and dead-end classes, when the background analyses have computed them."""
+    fva = recall(model, ("frog_fva", 0.0))
+    gaps = recall(model, "gapfind")
+    ranges = {r["id"]: (r["minimum"], r["maximum"]) for r in fva["reactions"]} if fva else {}
+    dead = {m: " + ".join(CLASS_LABELS[c] for c in cls) for m, cls in gaps["classes"].items()} if gaps and "classes" in gaps else {}
+    return ranges, dead
+
+
+def _met_record(met, role, compartment_names, dead_ends):
     return {
+        "dead_end": dead_ends.get(met.id),
         "id": met.id, "name": clean_metabolite_display_name(met), "role": role,
         "compartment": met.compartment,
         "compartment_name": compartment_names.get(met.compartment, met.compartment),
@@ -20,7 +43,7 @@ def _met_record(met, role, compartment_names):
     }
 
 
-def _rxn_record(rxn, types, wt, ko, trivial_ids, shown, hop, primary, extra, biomass_id, drawn):
+def _rxn_record(rxn, types, wt, ko, trivial_ids, shown, hop, primary, extra, biomass_id, drawn, fva):
     lb, ub = safe_float(rxn.lower_bound), safe_float(rxn.upper_bound)
     visible = [m for m in rxn.metabolites if m.id in shown and (drawn is None or m.id in drawn)]
     return {
@@ -31,6 +54,9 @@ def _rxn_record(rxn, types, wt, ko, trivial_ids, shown, hop, primary, extra, bio
         "reversible": bool(lb is not None and ub is not None and lb < 0 < ub),
         "flux_before": float(wt.fluxes[rxn.id]),
         "flux_after": None if ko is None else float(ko.fluxes[rxn.id]),
+        "direction": effective_direction(lb, ub),
+        "fva": fva.get(rxn.id),
+        "fva_blocked": rxn.id in fva and all(abs(v or 0.0) < model_tolerance(rxn) for v in fva[rxn.id]),
         "hop": hop, "primary": primary, "extra": extra, "biomass": rxn.id == biomass_id,
         "mets": [[m.id, rxn.metabolites[m]] for m in visible],
         "hidden_mets": [m.id for m in rxn.metabolites if m not in visible],
@@ -45,6 +71,7 @@ def build_map(model, types, wt, ko, compartment_names, trivial_ids, primary_rxns
     ko: the knockout flux solution, or None when growth is lost (no meaningful
     flux then, so every reaction counts as inactive after the knockout)."""
     drawn = drawn or {}
+    fva, dead_ends = _background_info(model)
     included = {rid: 0 for rid in primary_rxns}
     for rid in extra_rxns:
         included.setdefault(rid, 0)
@@ -79,14 +106,14 @@ def build_map(model, types, wt, ko, compartment_names, trivial_ids, primary_rxns
     extra_rxns = set(extra_rxns)
     reactions = [
         _rxn_record(model.reactions.get_by_id(rid), types, wt, ko, trivial_ids, shown, hop,
-                    rid in primary_rxns, rid in extra_rxns and rid not in primary_rxns, biomass_id, drawn.get(rid))
+                    rid in primary_rxns, rid in extra_rxns and rid not in primary_rxns, biomass_id, drawn.get(rid), fva)
         for rid, hop in included.items()
     ]
     on_route = set(primary_mets)
     metabolites = [
         _met_record(model.metabolites.get_by_id(mid),
                     "start" if mid in start_ids else "target" if mid in target_ids
-                    else "primary" if mid in on_route else "neighbour", compartment_names)
+                    else "primary" if mid in on_route else "neighbour", compartment_names, dead_ends)
         for mid in shown
     ]
     return {"reactions": reactions, "metabolites": metabolites, "truncated": truncated,

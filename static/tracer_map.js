@@ -15,6 +15,7 @@ function resetTracer() {
   TRACER_RESULT = null;
   TRACER_PICKS.extra = []; TRACER_PICKS.knockout = [];
   TRACER_VIEW.destroy();
+  if (typeof EXP !== "undefined" && EXP.cy) { EXP.cy.destroy(); EXP.cy = null; }
 }
 
 // "metabolite" | "reaction" | null for a typed id (case-insensitive; returns the exact id).
@@ -40,6 +41,11 @@ function renderTracer() {
       <div class="trc-chips" id="trc${key}Chips"></div>
       <input id="trc${key}" type="text" list="trcList" placeholder="${hint}" autocomplete="off"></div>`;
   $("tracer").innerHTML = `
+    <div class="trc-subtabs">
+      <button type="button" class="trc-subtab active" data-sub="Route">Route: start → target</button>
+      <button type="button" class="trc-subtab" data-sub="Explore">Explore: draw your own graph</button>
+    </div>
+    <div id="trcRouteView">
     <div class="note">
       Trace routes between any two points of the model. Start and target can each be a <strong>metabolite or a
       reaction</strong> (pick from the list or type to search). <strong>Active flux only</strong> follows reactions
@@ -66,7 +72,15 @@ function renderTracer() {
     </div>
     <div id="trcStatus" class="debug-status"></div>
     ${progressBarHtml("trcProgress")}
-    <div id="trcResult"></div>`;
+    <div id="trcResult"></div>
+    </div>
+    <div id="trcExploreView" class="hidden"></div>`;
+  document.querySelectorAll(".trc-subtab").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll(".trc-subtab").forEach(x => x.classList.toggle("active", x === b));
+    $("trcRouteView").classList.toggle("hidden", b.dataset.sub !== "Route");
+    $("trcExploreView").classList.toggle("hidden", b.dataset.sub !== "Explore");
+  }));
+  renderExplorer();
 
   ["trcStart", "trcTarget"].forEach(id => $(id).addEventListener("input", () => {
     const hit = tracerLookup($(id).value);
