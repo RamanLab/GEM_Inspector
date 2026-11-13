@@ -23,7 +23,7 @@ GEM Inspector is a Python (Flask) application that serves a web interface on the
 
     ```bash
     git clone https://github.com/RamanLab/GEM_Inspector.git
-    cd gem_inspector
+    cd GEM_Inspector
     ```
 
 === "Archive"
