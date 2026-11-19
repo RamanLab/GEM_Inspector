@@ -102,13 +102,16 @@ function resetSingleUpload() {
   $("homeLink").addEventListener("click", (ev) => { ev.preventDefault(); showView("home"); });
   $("newModelBtn").addEventListener("click", () => { showView("single"); resetSingleUpload(); });
 
-  $("dietExampleBtn").addEventListener("click", () => {
-    const csv = "exchange,flux\nEX_glc__D_e,10\nEX_o2_e,20\nEX_nh4_e,1000\nEX_pi_e,1000\nEX_h2o_e,1000\nEX_h_e,1000\n";
+  const download = (name, csv) => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = "example_diet.csv";
+    a.download = name;
     a.click();
     URL.revokeObjectURL(a.href);
-  });
+  };
+  $("dietExampleBtn").addEventListener("click", () => download("example_diet.csv",
+    "exchange,flux\nEX_glc__D_e,10\nEX_o2_e,20\nEX_nh4_e,1000\nEX_pi_e,1000\nEX_h2o_e,1000\nEX_h_e,1000\n"));
+  $("dietExampleBtn3").addEventListener("click", () => download("example_diet_with_bounds.csv",
+    "exchange,lower_bound,upper_bound\nEX_glc__D_e,-10,-10\nEX_o2_e,-20,1000\nEX_nh4_e,-1000,1000\nEX_pi_e,-1000,1000\nEX_h2o_e,-1000,1000\nEX_h_e,-1000,1000\n"));
   $("dietMode").addEventListener("change", () => { if ($("dietMode").value === "custom") $("dietHelp").open = true; });
 })();

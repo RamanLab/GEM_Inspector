@@ -76,6 +76,7 @@ analyzeBtn.addEventListener("click", async () => {
 
   if (dietMode.value === "custom" && !dietFileInput.files[0]) {
     status.innerHTML = `<span class="error">Choose a diet file, or switch "Diet / media" back to something else.</span>`;
+    openDietModal();
     return;
   }
 
@@ -86,16 +87,31 @@ analyzeBtn.addEventListener("click", async () => {
   try {
     const form = new FormData();
     form.append("model", file);
-    form.append("diet_mode", dietMode.value);
-    if (dietMode.value === "custom" && dietFileInput.files[0]) {
-      form.append("diet_file", dietFileInput.files[0]);
-    }
+    addDietFields(form);
 
     // Phase 1: Quick analysis
     const quickResponse = await fetch("/api/analyze-quick", { method:"POST", body:form });
     const quickData = await quickResponse.json();
     if (!quickResponse.ok) throw new Error(quickData.error || "Analysis failed");
 
+    showAnalysis(quickData);
+  } catch (err) {
+    status.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
+    analyzeBtn.disabled = false;
+    progressDone("mainProgress");
+  }
+});
+
+// The diet chosen in the pop-up, as form fields for /api/analyze-quick or /api/reanalyze.
+function addDietFields(form) {
+  const diet = dietUploadFields();
+  form.append("diet_mode", diet.mode);
+  if (diet.rows) form.append("diet_rows", diet.rows);
+  if (dietMode.value === "custom" && dietFileInput.files[0]) form.append("diet_file", dietFileInput.files[0]);
+}
+
+// Show the result of a fresh analysis (a new upload, or the same model under another diet).
+function showAnalysis(quickData) {
     // Store quick results and model ID
     const modelId = quickData.model_id;
     delete quickData.model_id;
@@ -127,12 +143,7 @@ analyzeBtn.addEventListener("click", async () => {
     streamKOAnalysis(modelId);
     startBackground(selectedBackgroundTasks());
 
-  } catch (err) {
-    status.innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`;
-    analyzeBtn.disabled = false;
-    progressDone("mainProgress");
-  }
-});
+}
 
 // Kept at module scope so a new analysis run can always find and close
 // whatever stream a *previous* run left open (see streamKOAnalysis).
@@ -533,6 +544,7 @@ function renderAll() {
   renderMetabolites();
   renderExchanges();
   renderObjective();
+  renderUptake();
   renderMinimalMedium();
   renderNetworkGaps();
   renderTracer();
@@ -653,6 +665,8 @@ function renderOverview() {
       return `<span class="badge" title="Compartment code: ${escapeHtml(c.id)}${escapeHtml(extra)}">${escapeHtml(c.name)}</span>`;
     }).join(" ")}</div>
 
+    ${maintenanceOverviewHtml()}
+
     <h3>Other details</h3>
     <dl class="kv">
       <dt>Model ID</dt><dd>${escapeHtml(s.model_id)}</dd>
@@ -739,6 +753,8 @@ const REACTION_TABLE_COLUMNS = [
   { key: "subsystem", label: "Subsystem" },
   { key: "gene_reaction_rule", label: "GPR" },
   { key: "compartments", label: "Compartment", value: r => (r.compartments || []).map(c => COMP_NAMES[c] || c).join("; ") },
+  { key: "lower_bound", label: "LB" },
+  { key: "upper_bound", label: "UB" },
   { key: "wt_flux", label: "WT flux" },
   { key: "fva_min", label: "FVA min" },
   { key: "fva_max", label: "FVA max" },
@@ -813,6 +829,8 @@ function renderReactions() {
         <th data-key="subsystem">Subsystem</th>
         <th data-key="gene_reaction_rule">GPR</th>
         <th data-key="compartments">Compartment</th>
+        <th data-key="lower_bound" title="Lower bound (negative = reverse direction allowed)">LB</th>
+        <th data-key="upper_bound">UB</th>
         <th data-key="wt_flux">WT flux</th>
         <th data-key="fva_min" title="Flux range from FVA (objective not constrained). Fills in when the FVA background analysis has run.">FVA min</th>
         <th data-key="fva_max" title="Flux range from FVA (objective not constrained). Fills in when the FVA background analysis has run.">FVA max</th>
@@ -858,6 +876,8 @@ function renderReactions() {
       <td>${reactionTypeBadge(r.type)}</td><td>${escapeHtml(r.subsystem || "—")}</td>
       <td class="wrap">${gprHtml(r.gene_reaction_rule)}</td>
       <td>${compartmentBadges(r.compartments)}</td>
+      <td class="num">${fmt(r.lower_bound, 2)}</td>
+      <td class="num">${fmt(r.upper_bound, 2)}</td>
       <td class="num">${fmt(r.wt_flux)}</td>
       <td class="num">${r.fva_min === undefined ? "—" : fmt(r.fva_min)}</td>
       <td class="num">${r.fva_max === undefined ? "—" : fmt(r.fva_max)}</td>
@@ -1078,7 +1098,7 @@ function growthBar(fraction) {
 function buildExchangeTooltipHtml(r) {
   return `
     <div class="tooltip-title">${escapeHtml(r.id)}${r.name ? ` — ${escapeHtml(r.name)}` : ""}</div>
-    <div class="tooltip-row"><span class="tooltip-label">Reaction</span><code>${escapeHtml(r.reaction_string || "—")}</code></div>
+    <div class="tooltip-row"><span class="tooltip-label">Reaction</span><code>${escapeHtml(shortEquation(r.reaction_string) || "—")}</code></div>
     <div class="tooltip-row"><span class="tooltip-label">Subsystem</span>${escapeHtml(r.subsystem || "—")}</div>
     <div class="tooltip-row"><span class="tooltip-label">GPR</span>${escapeHtml(r.gene_reaction_rule || "—")}</div>
     <div class="tooltip-row"><span class="tooltip-label">Bounds</span>[${fmt(r.lower_bound, 2)}, ${fmt(r.upper_bound, 2)}]</div>
@@ -1194,6 +1214,27 @@ function objectiveReactionExpressionHtml(open) {
       </div>
     </details>
   `;
+}
+
+// ATP maintenance (GAM in the biomass reaction, NGAM as a forced ATP-hydrolysis reaction), with warnings.
+function maintenanceOverviewHtml() {
+  const m = DATA.maintenance || { ngam: [], gam: [] };
+  const box = (title, items, warns) => `<div class="maint-card ${items.length ? "" : "missing"}">
+    <div class="maint-title">${title}</div>
+    ${items.length ? items.join("") : `<div class="maint-value muted">not found</div>`}
+    ${warns.map(w => `<div class="warn-box maint-warn">${w}</div>`).join("")}</div>`;
+  const gam = m.gam.map(g => `<div class="maint-item"><div class="maint-value">${fmt(g.coefficient)} <span>mmol ATP / gDW biomass</span></div>
+    <div class="maint-sub">in ${entityLink("rxn", g.reaction)}</div></div>`);
+  const ngam = m.ngam.map(n => `<div class="maint-item"><div class="maint-value">${fmt(n.lower_bound)} <span>mmol ATP / gDW / h minimum${n.forced ? "" : " (not forced)"}</span></div>
+    <div class="maint-sub">${entityLink("rxn", n.id)} ${escapeHtml(n.name || "")}<br>bounds [${fmt(n.lower_bound)}, ${fmt(n.upper_bound)}]</div></div>`);
+  const gw = [], nw = [];
+  if (!m.gam.length) gw.push("<strong>No GAM found.</strong> The biomass/objective reaction does not consume ATP (ATP + H2O → ADP + Pi + H+), so the energy cost of growth is not modelled. Check the biomass reaction if it should be.");
+  if (!m.ngam.length) nw.push("<strong>No NGAM found.</strong> No ATP-hydrolysis maintenance reaction (such as ATPM) was found, so the cost of staying alive without growing is not modelled.");
+  else if (!m.ngam.some(n => n.forced)) nw.push("The NGAM reaction has no forced lower bound (it is 0), so maintenance is optional rather than required.");
+  if (m.ngam.some(n => n.forced) && (DATA.stats.wt_growth || 0) < 1e-9)
+    nw.push("The model cannot grow while a forced NGAM must be met. If ATP regeneration is broken (common in draft models), this can be the cause.");
+  return `<h3>ATP maintenance (GAM / NGAM)</h3>
+    <div class="maint-grid">${box("GAM — growth-associated", gam, gw)}${box("NGAM — non-growth-associated", ngam, nw)}</div>`;
 }
 
 function renderObjective() {
@@ -2041,11 +2082,15 @@ let CURRENT_FROG_EVENTSOURCE = null;
 
 const FROG_FVA_CSV_COLUMNS = [
   { key: "id", label: "Reaction ID" },
+  { key: "lower_bound", label: "LB" },
+  { key: "upper_bound", label: "UB" },
   { key: "minimum", label: "Minimum flux" },
   { key: "maximum", label: "Maximum flux" },
 ];
 const FROG_REACTION_DELETION_CSV_COLUMNS = [
   { key: "id", label: "Reaction ID" },
+  { key: "lower_bound", label: "LB" },
+  { key: "upper_bound", label: "UB" },
   { key: "growth", label: "Growth after knockout" },
   { key: "status", label: "Solver status" },
 ];
@@ -2161,7 +2206,14 @@ function runFrogReport() {
   };
 }
 
+// The model's own bounds next to each reaction, taken from the Reactions table.
+function addReactionBounds(rows) {
+  (rows || []).forEach(r => { const x = entityRow("rxn", r.id); if (x) { r.lower_bound = x.lower_bound; r.upper_bound = x.upper_bound; } });
+}
+
 function renderFrogResults(data) {
+  addReactionBounds(data.fva && data.fva.reactions);
+  addReactionBounds(data.reaction_deletions && data.reaction_deletions.reactions);
   const obj = data.objective || {};
   $("frogResults").innerHTML = `
     <div class="frog-obj-card">
@@ -2213,8 +2265,8 @@ function renderFrogFvaTable(rows) {
   wrap.innerHTML = `
     <div class="toolbar"></div>
     <div class="table-wrap"><table id="frogFvaTable">
-      <thead><tr><th data-key="id">Reaction ID</th><th data-key="minimum">Minimum flux</th><th data-key="maximum">Maximum flux</th></tr></thead>
-      <tbody>${rows.map(r => `<tr><td><strong>${escapeHtml(r.id)}</strong></td><td class="num">${fmt(r.minimum, 6)}</td><td class="num">${fmt(r.maximum, 6)}</td></tr>`).join("")}</tbody>
+      <thead><tr><th data-key="id">Reaction ID</th><th data-key="lower_bound">LB</th><th data-key="upper_bound">UB</th><th data-key="minimum">Minimum flux</th><th data-key="maximum">Maximum flux</th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td><strong>${escapeHtml(r.id)}</strong></td><td class="num">${fmt(r.lower_bound, 2)}</td><td class="num">${fmt(r.upper_bound, 2)}</td><td class="num">${fmt(r.minimum, 6)}</td><td class="num">${fmt(r.maximum, 6)}</td></tr>`).join("")}</tbody>
     </table></div>
   `;
   attachTableTools("frogFvaTable", wrap.querySelector(".toolbar"), FROG_FVA_CSV_COLUMNS, () => frogFvaCurrentRows, "frog_fva");
@@ -2229,8 +2281,8 @@ function renderFrogReactionDeletionTable(rows) {
   wrap.innerHTML = `
     <div class="toolbar"></div>
     <div class="table-wrap"><table id="frogRxnDelTable">
-      <thead><tr><th data-key="id">Reaction ID</th><th data-key="growth">Growth after knockout</th><th data-key="status">Status</th></tr></thead>
-      <tbody>${rows.map(r => `<tr><td><strong>${escapeHtml(r.id)}</strong></td><td class="num">${fmt(r.growth, 6)}</td><td>${escapeHtml(r.status)}</td></tr>`).join("")}</tbody>
+      <thead><tr><th data-key="id">Reaction ID</th><th data-key="lower_bound">LB</th><th data-key="upper_bound">UB</th><th data-key="growth">Growth after knockout</th><th data-key="status">Status</th></tr></thead>
+      <tbody>${rows.map(r => `<tr><td><strong>${escapeHtml(r.id)}</strong></td><td class="num">${fmt(r.lower_bound, 2)}</td><td class="num">${fmt(r.upper_bound, 2)}</td><td class="num">${fmt(r.growth, 6)}</td><td>${escapeHtml(r.status)}</td></tr>`).join("")}</tbody>
     </table></div>
   `;
   attachTableTools("frogRxnDelTable", wrap.querySelector(".toolbar"), FROG_REACTION_DELETION_CSV_COLUMNS, () => frogRxnDelCurrentRows, "frog_reaction_deletions");
@@ -2945,7 +2997,7 @@ function memoteResultHtml(r) {
   return `
     <div class="memote-score">
       <div><div class="memote-score-num" style="color:${memoteScoreColor(total || 0)}">${memotePct(total)}</div>
-        <div class="mini-stat-label">MEMOTE total score</div></div>
+        <div class="mini-stat-label">MEMOTE total score${(m.skipped_slow_tests || []).length ? " (partial)" : ""}</div></div>
       <div class="memote-bars">${bars}</div>
     </div>
     <div class="chip-row" style="margin-bottom:12px;">
@@ -2955,6 +3007,7 @@ function memoteResultHtml(r) {
       <span class="badge skip">${r.counts.skipped} skipped</span>
       <span class="stoich">MEMOTE ${escapeHtml(m.memote_version || "")} · ${escapeHtml(m.duration_seconds)} s</span>
     </div>
+    ${(m.skipped_slow_tests || []).length ? `<div class="warn-box"><strong>Partial score.</strong> ${m.skipped_slow_tests.length} check(s) took too long and were left out, so they are neither passed nor failed and the total above is not for the full suite (it may be higher than the real score): ${m.skipped_slow_tests.map(n => escapeHtml(n.replace(/^test_/, "").replace(/_/g, " "))).join(", ")}.</div>` : ""}
     <h4 style="margin:14px 0 8px;">Needs attention <span class="stoich">(scored checks, largest impact on the score first)</span></h4>
     ${shown.length ? shown.map(memoteIssueHtml).join("") : '<div class="note" style="background:#ecfdf5;border-color:#a7f3d0;color:#047857;">No scored checks flagged an issue.</div>'}
     ${issues.length > 8 ? `<button type="button" class="secondary" data-memote-toggle="1">${MEMOTE_SHOW_ALL ? "Show fewer" : `Show all ${issues.length}`}</button>` : ""}

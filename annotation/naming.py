@@ -47,11 +47,15 @@ _COMPARTMENT_SUFFIX_RE = re.compile(
 )
 
 
-def parse_compartment_suffix(raw_id):
+def parse_compartment_suffix(raw_id, valid=None):
     """Split a trailing compartment tag off an id, in whichever convention
     it uses. Returns (base_id, compartment_code_lower_or_None). The
     numeric index, if any, is discarded here -- see compartment_display_name
     for where it's used for display disambiguation.
+
+    A "__D" / "__L" tail (BiGG stereo-isomer, as in glc__D) is part of the
+    name, not a compartment. `valid`, when given, is the set of the model's
+    compartment codes: any other trailing tag (the "_L" of ala_L) is left alone.
     """
     match = _COMPARTMENT_SUFFIX_RE.search(raw_id)
     if not match:
@@ -59,7 +63,16 @@ def parse_compartment_suffix(raw_id):
     groups = [g for g in match.groups() if g]
     code = groups[0].lower() if groups else None
     base = raw_id[: match.start()]
+    if match.group(1) and base.endswith("_"):
+        return raw_id, None
+    if valid and code not in valid:
+        return raw_id, None
     return base, code
+
+
+def model_compartment_codes(model):
+    """Lower-case compartment codes of a model, for parse_compartment_suffix."""
+    return {c.lower() for c in model.compartments}
 
 
 def metabolite_base_id(met_id):

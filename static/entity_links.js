@@ -58,6 +58,17 @@ function equationHtml(eq) {
   return eq.split(/(\s+)/).map(tok => entityRow("met", tok) ? entityLink("met", tok) : escapeHtml(tok)).join("");
 }
 
+// A long reaction equation (the biomass reaction has dozens of terms) cut after
+// whole terms, with "…" and the number of terms left out.
+function shortEquation(eq, maxChars = 150) {
+  if (!eq || eq.length <= maxChars) return eq || "";
+  const tokens = eq.split(/(\s+)/);
+  let out = "", i = 0;
+  while (i < tokens.length && (out + tokens[i]).length <= maxChars) out += tokens[i++];
+  const left = tokens.slice(i).filter(t => /^[A-Za-z_][^\s]*$/.test(t) && t !== "+").length;
+  return `${out.trimEnd()} … (${left} more)`;
+}
+
 // Table-search helper: a query starting with "=" is an exact id match (used
 // when arriving from a link); anything else is a substring search.
 function searchMatches(q, id, haystack) {
@@ -90,7 +101,8 @@ function cardRow(label, value) {
 function reactionCardHtml(r) {
   return `<div class="ent-title">${escapeHtml(r.id)}</div>
     <div>${escapeHtml(r.name || "")}</div>
-    <div class="ent-eq">${escapeHtml(r.equation || "")}</div>
+    <div class="ent-eq">${escapeHtml(shortEquation(r.equation))}</div>
+    ${(r.equation || "").length > 150 ? `<div class="ent-hint">click the id to see the full formula (Reactions tab; Objective tab for the biomass reaction)</div>` : ""}
     ${cardRow("Type", escapeHtml(r.type))}${cardRow("Subsystem", escapeHtml(r.subsystem))}
     ${cardRow("Bounds", `${fmt(r.lower_bound, 6)} … ${fmt(r.upper_bound, 6)}`)}
     ${cardRow("WT flux", fmt(r.wt_flux))}${r.fva_min === undefined ? "" : cardRow("FVA range", `${fmt(r.fva_min)} … ${fmt(r.fva_max)}${r.fva_blocked ? " (blocked)" : ""}`)}${cardRow("GPR", escapeHtml(r.gene_reaction_rule))}`;

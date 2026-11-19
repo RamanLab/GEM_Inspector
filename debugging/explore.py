@@ -12,6 +12,7 @@ from core.knockouts import reaction_knockout
 from debugging.map_graph import FLUX_TOLERANCE, _background_info, _met_record, _rxn_record
 
 MAX_NEW_REACTIONS = 40   # per expansion, active reactions first
+ESSENTIAL_FRACTION = 0.05  # essential when knockout growth is under 5% of wild type (as in the overview)
 TEST_TOLERANCE = 1e-7
 
 
@@ -25,7 +26,7 @@ def can_use(rxn, met, tol=FLUX_TOLERANCE):
     return (coeff < 0 and rxn.upper_bound > tol) or (coeff > 0 and rxn.lower_bound < -tol)
 
 
-def _neighbour_reactions(model, kind, ident, direction):
+def _neighbour_reactions(model, kind, ident, direction, trivial_ids=()):
     """[(reaction, the metabolite it was reached from)] for one step in `direction`."""
     ups, downs = direction in ("up", "both"), direction in ("down", "both")
     if kind == "metabolite":
@@ -34,6 +35,8 @@ def _neighbour_reactions(model, kind, ident, direction):
     rxn = model.reactions.get_by_id(ident)
     found = []
     for met in rxn.metabolites:
+        if met.id in trivial_ids:  # ATP, H+ ... would pull in hundreds of unrelated reactions
+            continue
         if (ups and can_use(rxn, met)):   # a substrate of this reaction: who makes it?
             found += [(r, met) for r in met.reactions if r is not rxn and can_make(r, met)]
         if (downs and can_make(rxn, met)):  # a product: who uses it?
@@ -47,7 +50,7 @@ def expand(model, wt, kind, ident, direction, trivial_ids, compartment_names, ty
     trivial_ids = set(trivial_ids) - ({ident} if kind == "metabolite" else set())
     fva, dead_ends = _background_info(model)
     found = {}
-    for rxn, via in _neighbour_reactions(model, kind, ident, direction):
+    for rxn, via in _neighbour_reactions(model, kind, ident, direction, trivial_ids):
         found.setdefault(rxn.id, (rxn, via))
     ordered = sorted(found.values(), key=lambda rv: (abs(wt.fluxes[rv[0].id]) <= FLUX_TOLERANCE, len(rv[0].metabolites)))
     truncated = len(ordered) > MAX_NEW_REACTIONS
@@ -61,11 +64,11 @@ def expand(model, wt, kind, ident, direction, trivial_ids, compartment_names, ty
     for rxn, via in ordered:
         shown = {m.id for m in rxn.metabolites if m.id not in trivial_ids}
         drawn = {via.id} if rxn.id == biomass_id and via is not None else None  # keep the biomass hub readable
-        if rxn.id == biomass_id and via is None:
-            drawn = set()
+        if rxn.id == biomass_id and via is None:  # the seed itself: draw only the links to what was found
+            drawn = {v.id for _, v in found.values() if v is not None}
         rec = _rxn_record(rxn, types, wt, None, trivial_ids, shown, 1, False, False, biomass_id, drawn, fva)
         value, _ = reaction_knockout(work, work.reactions.get_by_id(rxn.id))
-        rec["essential"] = (value is None or value < 1e-6) and wt_growth > 0
+        rec["essential"] = (value is None or value < ESSENTIAL_FRACTION * wt_growth) and wt_growth > 0
         reactions.append(rec)
         met_ids.update(m for m, _ in rec["mets"])
     if kind == "metabolite":

@@ -469,3 +469,32 @@ td.num, th[data-key="lower_bound"], th[data-key="upper_bound"], th[data-key="wt_
 .exp-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
 .exp-actions button { padding:6px 10px; font-size:12px; }
 @media (max-width: 900px) { .exp-layout { grid-template-columns:1fr; } }
+
+/* Diet table */
+#dietTableWrap { display:flex; flex-direction:column; gap:8px; }
+.diet-table { max-height:320px; overflow:auto; }
+.diet-table input[type=number] { width:100px; }
+
+/* Diet pop-up */
+.diet-summary { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+#dietSummary { font-size:14px; }
+.diet-modal-body { display:flex; flex-direction:column; gap:12px; }
+.diet-modal-body select { width:100%; }
+.diet-label { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; }
+.diet-modal-body .diet-help { margin:0; }
+.diet-examples { display:grid; grid-template-columns:1fr 1fr; gap:12px; align-items:start; }
+.diet-examples pre { margin:6px 0; overflow:auto; }
+@media (max-width: 700px) { .diet-examples { grid-template-columns:1fr; } }
+
+/* ATP maintenance cards (Overview) */
+.maint-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:10px 0 18px; clear:both; }
+@media (max-width: 760px) { .maint-grid { grid-template-columns:1fr; } }
+.maint-card { border:1px solid var(--line); border-radius:12px; padding:16px 18px; background:#fff; min-width:0; display:flex; flex-direction:column; gap:10px; }
+.maint-item + .maint-item { border-top:1px solid var(--line); padding-top:10px; }
+.maint-card.missing { border-style:dashed; background:#fffdf5; }
+.maint-title { font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px; }
+.maint-value { font-size:22px; font-weight:700; }
+.maint-value span { font-size:12px; font-weight:400; color:var(--muted); }
+.maint-value.muted { color:var(--muted); font-weight:600; }
+.maint-sub { margin-top:6px; font-size:13px; color:var(--muted); }
+.maint-warn { margin:0; }

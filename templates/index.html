@@ -48,38 +48,11 @@
     </label>
 
     <div class="diet-control">
-      <label for="dietMode">Diet / media</label>
-      <select id="dietMode">
-        <option value="none" selected>Model's original bounds (no diet)</option>
-        <option value="complete">Complete media (open all exchanges)</option>
-        <option value="minimal">Minimal media (computed)</option>
-        <option value="custom">Custom diet (upload file)</option>
-      </select>
-      <label class="dropzone dropzone-inline hidden" id="dietDropzone">
-        <input id="dietFile" type="file" accept=".csv,.tsv,.txt">
-        <strong>Drop a diet file here</strong>
-        <span>or click to choose a CSV/TSV of (metabolite or exchange id, flux)</span>
-      </label>
-      <span id="dietFilename"></span>
-      <details class="diet-help" id="dietHelp">
-        <summary>What should a diet file look like?</summary>
-        <p>A plain-text table with <strong>two columns</strong>: the exchange reaction id (or the metabolite id) and a flux value.
-          CSV, TSV or semicolon-separated all work, and a header row is optional (it is detected and skipped).</p>
-        <ul>
-          <li>A <strong>positive</strong> number is the maximum uptake rate (mmol/gDW/h) for that nutrient.</li>
-          <li>Every exchange <strong>not listed</strong> is closed for uptake, so list everything the cells may consume.</li>
-          <li>Ids may be exchange reactions (<code>EX_glc__D_e</code>) or metabolites (<code>glc__D</code>, <code>glc__D[e]</code>).
-            Unmatched rows are reported after the analysis.</li>
-        </ul>
-        <pre>exchange,flux
-EX_glc__D_e,10
-EX_o2_e,20
-EX_nh4_e,1000
-EX_pi_e,1000
-EX_h2o_e,1000
-EX_h_e,1000</pre>
-        <button type="button" id="dietExampleBtn" class="secondary">Download this example (CSV)</button>
-      </details>
+      <label>Diet / media</label>
+      <div class="diet-summary">
+        <span id="dietSummary">Model's original bounds (no diet)</span>
+        <button type="button" class="secondary" id="dietOpenBtn">Choose diet / media…</button>
+      </div>
     </div>
 
     <div class="bg-options">
@@ -140,6 +113,7 @@ EX_h_e,1000</pre>
     <div class="app-toolbar">
       <button id="memotePill" type="button" class="memote-pill hidden" title="Go to the MEMOTE tab"></button>
       <button id="reportBtn" type="button">📄 Generate report…</button>
+      <button id="dietChangeBtn" type="button" class="secondary">Change diet &amp; re-analyze…</button>
     </div>
 
     <nav class="modnav" aria-label="Modules">
@@ -156,6 +130,7 @@ EX_h_e,1000</pre>
       <button class="tab" data-tab="reactions">Reactions</button>
       <button class="tab" data-tab="genes">Genes</button>
       <button class="tab" data-tab="objective">Objective</button>
+      <button class="tab" data-tab="uptake">Uptake &amp; secretion</button>
       <button class="tab" data-tab="memote">MEMOTE</button>
     </nav>
     <nav class="subnav hidden" data-module="diagnostics">
@@ -182,6 +157,7 @@ EX_h_e,1000</pre>
     <section id="reactions" class="panel"></section>
     <section id="genes" class="panel"></section>
     <section id="objective" class="panel"></section>
+    <section id="uptake" class="panel"></section>
     <section id="memote" class="panel"><h2>MEMOTE quality report</h2><div id="memoteBox"></div></section>
     <section id="minmed" class="panel"></section>
     <section id="exchanges" class="panel"></section>
@@ -203,6 +179,69 @@ EX_h_e,1000</pre>
 
 <script src="/static/vendor/cytoscape.min.js"></script>
 <script src="/static/currency.js?v={{ v }}"></script>
+    <!-- Diet / media pop-up (filled and driven by static/diet.js) -->
+    <div class="modal-overlay hidden" id="dietModal">
+      <div class="modal-box">
+        <div class="modal-header"><h2>Diet / media</h2>
+          <button type="button" class="modal-close" id="dietClose" aria-label="Close">✕</button></div>
+        <div class="modal-body diet-modal-body">
+          <label for="dietMode" class="diet-label">Medium</label>
+          <select id="dietMode">
+            <option value="none" selected>Model's original bounds (no diet)</option>
+            <option value="complete">Complete media (open all exchanges)</option>
+            <option value="minimal">Minimal media (computed)</option>
+            <option value="custom">Custom diet (upload file)</option>
+          </select>
+          <label class="dropzone dropzone-inline hidden" id="dietDropzone">
+            <input id="dietFile" type="file" accept=".csv,.tsv,.txt">
+            <strong>Drop a diet file here</strong>
+            <span>or click to choose a CSV/TSV: <em>id, flux</em> or <em>id, lower bound, upper bound</em></span>
+          </label>
+          <span id="dietFilename"></span>
+          <div id="dietTableWrap" class="hidden"></div>
+          <details class="diet-help" id="dietHelp">
+            <summary>What should a diet file look like?</summary>
+            <p>A plain-text table (CSV, TSV or semicolon-separated) with <strong>one row per nutrient</strong>. A header row is optional
+              (it is detected and skipped). There are two layouts:</p>
+            <ul>
+              <li><strong>Two columns</strong> — <code>id, flux</code>. A positive number is the maximum uptake rate (mmol/gDW/h), so the
+                exchange's lower bound becomes its negative. The upper (secretion) bound stays as in the model.</li>
+              <li><strong>Three columns</strong> — <code>id, lower bound, upper bound</code>. Both bounds are used exactly as given, e.g.
+                <code>-10,1000</code> allows uptake up to 10 and free secretion; <code>-10,-10</code> forces uptake of exactly 10.</li>
+            </ul>
+            <ul>
+              <li>The id can be an exchange reaction (<code>EX_glc__D_e</code>) or a metabolite (<code>glc__D</code>, <code>glc__D[e]</code>).
+                Rows that match no exchange in the model are listed after the analysis.</li>
+              <li>Every exchange <strong>not listed</strong> is closed for uptake, so list everything the cells may consume.</li>
+            </ul>
+            <div class="diet-examples">
+              <div><strong>Two columns</strong><pre>exchange,flux
+EX_glc__D_e,10
+EX_o2_e,20
+EX_nh4_e,1000
+EX_pi_e,1000
+EX_h2o_e,1000
+EX_h_e,1000</pre>
+                <button type="button" id="dietExampleBtn" class="secondary">Download (2 columns)</button></div>
+              <div><strong>Three columns</strong><pre>exchange,lower_bound,upper_bound
+EX_glc__D_e,-10,-10
+EX_o2_e,-20,1000
+EX_nh4_e,-1000,1000
+EX_pi_e,-1000,1000
+EX_h2o_e,-1000,1000
+EX_h_e,-1000,1000</pre>
+                <button type="button" id="dietExampleBtn3" class="secondary">Download (with bounds)</button></div>
+            </div>
+          </details>
+        </div>
+        <div class="modal-footer">
+          <span class="modal-status" id="dietModalStatus"></span>
+          <button type="button" id="dietReanalyze" class="hidden" style="margin-left:auto">Re-analyze loaded model</button>
+          <button type="button" id="dietDone" class="secondary">Done</button>
+        </div>
+      </div>
+    </div>
+
 <script src="/static/app.js?v={{ v }}"></script>
 <script src="/static/genes.js?v={{ v }}"></script>
 <script src="/static/entity_links.js?v={{ v }}"></script>
@@ -210,6 +249,8 @@ EX_h_e,1000</pre>
 <script src="/static/report_charts.js?v={{ v }}"></script>
 <script src="/static/report_thresholds.js?v={{ v }}"></script>
 <script src="/static/list_export.js?v={{ v }}"></script>
+<script src="/static/uptake.js?v={{ v }}"></script>
+<script src="/static/diet.js?v={{ v }}"></script>
 <script src="/static/background.js?v={{ v }}"></script>
 <script src="/static/network_map.js?v={{ v }}"></script>
 <script src="/static/exchange_map.js?v={{ v }}"></script>

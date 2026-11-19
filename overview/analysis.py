@@ -5,6 +5,8 @@ import json
 
 from cobra.util import linear_reaction_coefficients
 
+from overview.maintenance import find_maintenance
+from overview.uptake_secretion import uptake_secretion
 from annotation.naming import (
     clean_metabolite_display_name,
     clean_reaction_display_name,
@@ -300,6 +302,8 @@ def quick_analyze(model):
         "genes": gene_rows(model, fluxes),
         "objective": objective_components,
         "objective_metabolites": objective_metabolites,
+        "uptake_secretion": uptake_secretion(model, wt_solution),
+        "maintenance": find_maintenance(model, [r.id for r in linear_reaction_coefficients(model)]),
         "namespace_audit": namespace_audit,
         "wt_growth": wt_growth,
         "fluxes": dict(fluxes),

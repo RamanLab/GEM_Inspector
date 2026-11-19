@@ -2,6 +2,8 @@
 (minimal medium, blocked reactions, FROG's F/R/G) -- see run_with_exact_solver.
 """
 
+import sys
+
 
 def _current_solver(model):
     try:
@@ -33,7 +35,8 @@ def _with_solver(model, name, fn):
 
 def run_with_exact_solver(model, fn):
     """Run fn() on GLPK's exact-arithmetic interface when the model uses
-    plain GLPK, otherwise unchanged.
+    plain GLPK on Windows, otherwise unchanged (the crash is Windows-only and
+    exact arithmetic is several times slower).
 
     Why: on badly scaled genome-scale LPs (e.g. exchanges opened to +-1000)
     some GLPK builds (seen on Windows) abort inside glp_free, taking the whole
@@ -41,7 +44,7 @@ def run_with_exact_solver(model, fn):
     floating-point scaling and avoids this, at some cost in speed. Gurobi,
     CPLEX and HiGHS do not have this problem, so they are left alone.
     """
-    if _current_solver(model) != "glpk":
+    if _current_solver(model) != "glpk" or sys.platform != "win32":
         return fn()
     return _with_solver(model, "glpk_exact", fn)
 

@@ -58,7 +58,7 @@ function mapAttachTooltips(cy) {
     <div class="tooltip-row"><span class="tooltip-label">Formula</span>${escapeHtml(d.formula || "—")}</div>
     ${d.dead_end ? `<div class="tooltip-row"><span class="tooltip-label">Dead end</span>${escapeHtml(d.dead_end)}</div>` : ""}`;
   const rxnHtml = d => `<div class="tooltip-title">${escapeHtml(d.id)}${d.name ? ` — ${escapeHtml(d.name)}` : ""}</div>
-    <div class="tooltip-row"><span class="tooltip-label">Reaction</span><code>${escapeHtml(d.equation || "—")}</code></div>
+    <div class="tooltip-row"><span class="tooltip-label">Reaction</span><code>${escapeHtml(shortEquation(d.equation) || "—")}</code></div>
     <div class="tooltip-row"><span class="tooltip-label">Status</span>${escapeHtml(d.state)} (flux ${fmt(d.flux)})</div>
     <div class="tooltip-row"><span class="tooltip-label">Bounds</span>[${fmt(d.lower_bound, 2)}, ${fmt(d.upper_bound, 2)}]</div>
     ${d.fva ? `<div class="tooltip-row"><span class="tooltip-label">FVA range</span>[${fmt(d.fva[0], 4)}, ${fmt(d.fva[1], 4)}]${d.fva_blocked ? " — blocked" : ""}</div>` : ""}

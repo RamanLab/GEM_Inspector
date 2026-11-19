@@ -11,16 +11,24 @@ user-uploaded custom diet file:
   - "custom"   : close every exchange, then open exactly the ones named in
                  an uploaded diet file, at the given bound.
 
-Only lower bounds (uptake capacity) are ever touched; secretion (upper
-bounds) is left as defined in the uploaded model.
+Uptake (lower bounds) is always set from the diet. Secretion (upper bounds) is
+left as defined in the uploaded model unless an entry gives an upper bound too.
+An entry may give both bounds (lower, upper); with both negative the uptake of
+that nutrient is forced.
 """
 import csv
 import io
+import re
 
 
 from annotation.naming import metabolite_base_id
 from core.shared import safe_float
 from diagnostics.solver_utils import solve_minimal_medium
+
+
+def _squash(text):
+    """Letters and digits only, lower-case: glc__D, glc_D, GLC-D and glcD all become 'glcd'."""
+    return re.sub(r"[^a-z0-9]", "", (text or "").lower())
 
 
 def build_exchange_index(model):
@@ -30,15 +38,22 @@ def build_exchange_index(model):
     (which may use a different compartment-tag convention than this model,
     e.g. "glc_D_e" vs this model's "glc_D_e0", or VMH-style "glc_D[e]")
     against this model's actual exchange reactions.
+
+    Two looser lookups are returned too: the base id and the metabolite name
+    with punctuation removed, so "glc__D" (BiGG) finds a model that writes
+    "glc_D", and a medium's compound name can find a differently named id.
     """
-    by_rxn_id, by_full_met_id, by_base_met_id = {}, {}, {}
+    by_rxn_id, by_full_met_id, by_base_met_id, by_squashed, by_name = {}, {}, {}, {}, {}
     for exch in model.exchanges:
         by_rxn_id[exch.id.lower()] = exch.id
         if len(exch.metabolites) == 1:
             (met,) = exch.metabolites.keys()
             by_full_met_id.setdefault(met.id.lower(), exch.id)
             by_base_met_id.setdefault(metabolite_base_id(met.id), exch.id)
-    return by_rxn_id, by_full_met_id, by_base_met_id
+            by_squashed.setdefault(_squash(metabolite_base_id(met.id)), exch.id)
+            if met.name:
+                by_name.setdefault(_squash(met.name), exch.id)
+    return by_rxn_id, by_full_met_id, by_base_met_id, by_squashed, by_name
 
 
 def parse_diet_file(file_storage):
@@ -46,7 +61,8 @@ def parse_diet_file(file_storage):
 
     Accepts CSV, TSV, or semicolon-separated text with at least two
     columns: an identifier (an exchange reaction id, or a bare/
-    compartment-tagged metabolite id) and a flux value. Following the VMH
+    compartment-tagged metabolite id) and a flux value. With a third numeric
+    column the second is the lower bound and the third the upper bound. Following the VMH
     diet-file convention, a positive flux is treated as an uptake magnitude
     and negated into a lower bound; a non-positive value is used directly
     as the lower bound. A header row is auto-detected (any row whose second
@@ -73,33 +89,59 @@ def parse_diet_file(file_storage):
             flux = float(cells[1])
         except ValueError:
             continue  # header row, or an unparseable line -- skip rather than fail the whole file
+        upper = None
+        if len(cells) >= 3 and cells[2] != "":
+            try:
+                upper = float(cells[2])   # a third numeric column makes the second the lower bound
+            except ValueError:
+                upper = None
         if raw_id:
-            entries.append((raw_id, flux))
+            entries.append((raw_id, flux, upper) if upper is not None else (raw_id, flux))
     return entries
 
 
 def resolve_diet_entries(model, entries):
     """Match parsed diet entries against this model's actual exchange
-    reactions. Returns (matched: {exchange_id: lower_bound}, unmatched:
+    reactions. Returns (matched: {exchange_id: (lower_bound, upper_bound or None)}, unmatched:
     [{"id":..., "flux":...}, ...]) so unmatched entries can be surfaced to
-    the user rather than silently dropped."""
-    by_rxn_id, by_full_met_id, by_base_met_id = build_exchange_index(model)
+    the user rather than silently dropped.
+
+    An entry is (id, flux), (id, lower, upper) or (id, lower, upper, name); the
+    name, when given, is the last thing tried."""
+    by_rxn_id, by_full_met_id, by_base_met_id, by_squashed, by_name = build_exchange_index(model)
     matched, unmatched = {}, []
 
-    for raw_id, flux in entries:
-        lower_bound = -flux if flux > 0 else flux
+    for entry in entries:
+        raw_id = entry[0]
+        name = entry[3] if len(entry) > 3 else ""
+        if len(entry) >= 3:   # (id, lower bound, upper bound): used as given
+            flux, lower_bound, upper_bound = entry[1], entry[1], entry[2]
+        else:                 # (id, flux): a positive value is an uptake magnitude
+            flux = entry[1]
+            lower_bound, upper_bound = (-flux if flux > 0 else flux), None
         key = raw_id.strip().lower()
+        bare = key[3:] if key.startswith("ex_") else key
 
         exch_id = by_rxn_id.get(key) or by_full_met_id.get(key)
         if exch_id is None:
             exch_id = by_base_met_id.get(metabolite_base_id(raw_id.strip()))
         if exch_id is None and not key.startswith("ex_"):
             exch_id = by_rxn_id.get("ex_" + key)
+        # A bare id such as glc__D: its stereo suffix (__D, __L) can be read as a compartment tag, so
+        # also try it with the extracellular tag written out.
+        if exch_id is None and not key.startswith("ex_"):
+            exch_id = by_full_met_id.get(key + "_e") or by_rxn_id.get("ex_" + key + "_e")
+        # The model's own convention: ignore underscores and punctuation (glc__D = glc_D = glcD),
+        # with or without a compartment tag on the entry.
+        if exch_id is None:
+            exch_id = by_squashed.get(_squash(bare)) or by_squashed.get(_squash(metabolite_base_id(bare)))
+        if exch_id is None and name:
+            exch_id = by_name.get(_squash(name))
 
         if exch_id is None:
             unmatched.append({"id": raw_id, "flux": flux})
         else:
-            matched[exch_id] = lower_bound
+            matched[exch_id] = (lower_bound, upper_bound)
 
     return matched, unmatched
 
@@ -179,9 +221,10 @@ def apply_diet_to_model(model, mode, diet_entries=None):
         exch.lower_bound = 0.0
     matched, unmatched = resolve_diet_entries(model, diet_entries or [])
     applied = []
-    for exch_id, lower_bound in matched.items():
+    for exch_id, (lower_bound, upper_bound) in matched.items():
         rxn = model.reactions.get_by_id(exch_id)
-        rxn.lower_bound = min(lower_bound, rxn.upper_bound)
+        upper = rxn.upper_bound if upper_bound is None else upper_bound
+        rxn.bounds = (min(lower_bound, upper), upper)
         applied.append(exch_id)
 
     total = len(applied) + len(unmatched)
@@ -189,3 +232,18 @@ def apply_diet_to_model(model, mode, diet_entries=None):
     if unmatched:
         note += f" {len(unmatched)} entries could not be matched to an exchange reaction in this model (shown below)."
     return {"mode": "custom", "applied": applied, "unmatched": unmatched, "note": note}
+
+
+def entries_from_rows(rows):
+    """(id, lower, upper, name) entries from the editable diet table the browser sends:
+    [{"id":..., "lower_bound":..., "upper_bound":...}, ...]. Bad rows are skipped."""
+    entries = []
+    for row in rows or []:
+        try:
+            ident = str(row["id"]).strip()
+            lower, upper = float(row["lower_bound"]), float(row["upper_bound"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if ident and lower <= upper:
+            entries.append((ident, lower, upper, str(row.get("name") or "").strip()))
+    return entries

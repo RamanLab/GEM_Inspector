@@ -41,11 +41,11 @@ def build_active_flux_downstream_graph(model, active_flux, flux_tolerance, trivi
         flux = active_flux[rxn.id]
 
         if flux > 0:
-            substrates = [met for met, coeff in rxn.metabolites.items() if coeff < -flux_tolerance]
-            products = [met for met, coeff in rxn.metabolites.items() if coeff > flux_tolerance]
+            substrates = [met for met, coeff in rxn.metabolites.items() if coeff < 0]
+            products = [met for met, coeff in rxn.metabolites.items() if coeff > 0]
         else:
-            substrates = [met for met, coeff in rxn.metabolites.items() if coeff > flux_tolerance]
-            products = [met for met, coeff in rxn.metabolites.items() if coeff < -flux_tolerance]
+            substrates = [met for met, coeff in rxn.metabolites.items() if coeff > 0]
+            products = [met for met, coeff in rxn.metabolites.items() if coeff < 0]
 
         for substrate in substrates:
             if substrate.id in trivial_ids:
@@ -148,7 +148,7 @@ def format_flux_path(model, solution, start_met, path, reaction_types=None, comp
         for met, coeff in rxn.metabolites.items():
             if met.id in hop_ids or not (met.id.lower() in extra or metabolite_base_id(met.id).lower() in extra):
                 continue
-            role = "substrate" if (coeff < 0) == (flux > 0) else "product"
+            role = "substrate" if (coeff < 0) == (flux >= 0) else "product"  # zero flux reads forwards
             side.append(dict(met_info(met), role=role))
         return side
 
@@ -202,9 +202,9 @@ def resolve_reaction_start_metabolites(model, reaction_id, solution, flux_tolera
         )
 
     if flux > 0:
-        products = [met for met, coeff in rxn.metabolites.items() if coeff > flux_tolerance]
+        products = [met for met, coeff in rxn.metabolites.items() if coeff > 0]
     else:
-        products = [met for met, coeff in rxn.metabolites.items() if coeff < -flux_tolerance]
+        products = [met for met, coeff in rxn.metabolites.items() if coeff < 0]
 
     return products, None
 
@@ -266,7 +266,7 @@ def debug_exchange_to_biomass(
 
     def is_biomass_target(met_id):
         biomass_coeff = biomass.metabolites.get(model.metabolites.get_by_id(met_id), 0)
-        return biomass_coeff < -flux_tolerance
+        return biomass_coeff < 0
 
     paths = bfs_flux_paths(downstream, start_met.id, is_biomass_target, max_flux_paths, max_flux_path_depth)
     formatted_paths = [

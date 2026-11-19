@@ -21,7 +21,7 @@ Output id styles:
 import re
 
 from annotation.id_renaming import apply_renames, count_outcomes, new_outcome, resolve_collisions
-from annotation.naming import clean_metabolite_display_name, parse_compartment_suffix
+from annotation.naming import clean_metabolite_display_name, model_compartment_codes, parse_compartment_suffix
 from annotation.namespace_mapping import (
     NS_LABELS,
     detect_metabolite_namespace_and_map,
@@ -74,9 +74,9 @@ def _lookup(table, seed_id, outcome, missing_reason):
 
 
 def _plan_metabolites(model, table, style):
-    outcomes = []
+    outcomes, valid = [], model_compartment_codes(model)
     for met in model.metabolites:
-        base, code = parse_compartment_suffix(met.id)
+        base, code = parse_compartment_suffix(met.id, valid)
         out = _outcome("metabolite", met, base)
         out["name"] = clean_metabolite_display_name(met)
         vmh = _lookup(table, base, out, "Not in the metabolite translation table")
@@ -92,7 +92,7 @@ def _plan_metabolites(model, table, style):
 
 
 def _plan_reactions(model, met_table, rxn_table, style):
-    outcomes = []
+    outcomes, valid = [], model_compartment_codes(model)
     for rxn in model.reactions:
         out = _outcome("reaction", rxn, rxn.id)
         out["name"] = rxn.name or ""
@@ -100,7 +100,7 @@ def _plan_reactions(model, met_table, rxn_table, style):
 
         if prefix:
             rest = rxn.id[len(prefix):]
-            base, code = parse_compartment_suffix(rest)
+            base, code = parse_compartment_suffix(rest, valid)
             out["seed_id"] = base
             vmh = _lookup(met_table, base, out, "Boundary reaction: metabolite not in the metabolite translation table")
             if vmh:

@@ -79,7 +79,7 @@ def elements_of(formula):
 def hill(elements):
     """Formula string from element counts (C, H, then alphabetical)."""
     order = sorted(elements, key=lambda e: (e not in ("C", "H"), "CH".index(e) if e in ("C", "H") else 0, e))
-    return "".join(f"{e}{int(n) if n != 1 else ''}" for e, n in ((e, elements[e]) for e in order) if n)
+    return "".join(f"{e}{n:g}" if n != 1 else e for e, n in ((e, elements[e]) for e in order) if n)
 
 
 def _same_formula(a, b):
@@ -88,7 +88,9 @@ def _same_formula(a, b):
 
 
 def _fmt_charge(charge):
-    return "?" if charge is None else f"{charge:+d}" if charge else "0"
+    if charge is None:
+        return "?"
+    return f"{charge:+g}" if charge else "0"
 
 
 # --- Balance arithmetic -----------------------------------------------------------

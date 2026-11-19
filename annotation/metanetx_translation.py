@@ -26,7 +26,7 @@ Compartment tags (id style):
 import re
 
 from annotation.id_renaming import apply_renames, count_outcomes, new_outcome, resolve_collisions
-from annotation.naming import clean_metabolite_display_name, parse_compartment_suffix
+from annotation.naming import clean_metabolite_display_name, model_compartment_codes, parse_compartment_suffix
 from annotation.namespace_mapping import (
     NS_LABELS,
     detect_metabolite_namespace_and_map,
@@ -98,9 +98,9 @@ def _choose(outcome, candidates, source_base, pick_first):
 
 
 def _plan_metabolites(model, target, style, pick_first, met_to_mnx):
-    outcomes = []
+    outcomes, valid = [], model_compartment_codes(model)
     for met in model.metabolites:
-        base, code = parse_compartment_suffix(met.id)
+        base, code = parse_compartment_suffix(met.id, valid)
         out = new_outcome("metabolite", met, mnx_id=met_to_mnx.get(met.id) or "", target_id="", new_base=None)
         out["name"] = clean_metabolite_display_name(met)
         if not out["mnx_id"]:
@@ -118,7 +118,7 @@ def _plan_metabolites(model, target, style, pick_first, met_to_mnx):
 
 def _plan_reactions(model, target, style, pick_first, rxn_to_mnx, met_outcomes):
     by_met_id = {o["original_id"]: o for o in met_outcomes}
-    outcomes = []
+    outcomes, valid = [], model_compartment_codes(model)
     for rxn in model.reactions:
         out = new_outcome("reaction", rxn, mnx_id=rxn_to_mnx.get(rxn.id) or "", target_id="")
         out["name"] = rxn.name or ""
@@ -128,7 +128,7 @@ def _plan_reactions(model, target, style, pick_first, rxn_to_mnx, met_outcomes):
         if prefix and rxn.boundary and len(mets) == 1 and by_met_id[mets[0].id]["status"] == "mapped":
             met_out = by_met_id[mets[0].id]
             rest = rxn.id[len(prefix):]
-            base, code = parse_compartment_suffix(rest)
+            base, code = parse_compartment_suffix(rest, valid)
             code = _compartment_code(mets[0], code)
             tag = _tag("underscore" if style == "underscore" else "bracket" if style == "bracket" else "keep", code, rest[len(base):])
             if style == "bracket" and code:
@@ -160,14 +160,20 @@ def _namespace_summary(model):
 
 
 def _metanetx_summary(model):
-    """Share of ids that are MetaNetX ids (MNXM... / MNXR...) after translating to MetaNetX."""
-    def share(objects, pattern):
-        ids = [parse_compartment_suffix(o.id)[0] for o in objects]
-        ids = [i[3:] if i[:3] in BOUNDARY_PREFIXES else i for i in ids]
-        return sum(bool(pattern.match(i)) for i in ids) / len(ids) if ids else 0.0
+    """Share of ids that are MetaNetX ids (MNXM... / MNXR...) after translating to MetaNetX.
+    A boundary reaction (EX_MNXM..._e) counts when its metabolite part is a MetaNetX id."""
+    valid = model_compartment_codes(model)
     met_re, rxn_re = re.compile(r"^MNXM\d+$"), re.compile(r"^MNXR\d+$")
-    return {"metabolites": {"key": "metanetx", "label": "MetaNetX", "coverage": share(model.metabolites, met_re)},
-            "reactions": {"key": "metanetx", "label": "MetaNetX", "coverage": share(model.reactions, rxn_re)}}
+
+    def share(objects, is_reaction):
+        hits = 0
+        for o in objects:
+            base = parse_compartment_suffix(o.id, valid)[0]
+            prefix = next((p for p in BOUNDARY_PREFIXES if base.startswith(p)), None) if is_reaction else None
+            hits += bool(met_re.match(base[len(prefix):])) if prefix else bool((rxn_re if is_reaction else met_re).match(base))
+        return hits / len(objects) if len(objects) else 0.0
+    return {"metabolites": {"key": "metanetx", "label": "MetaNetX", "coverage": share(model.metabolites, False)},
+            "reactions": {"key": "metanetx", "label": "MetaNetX", "coverage": share(model.reactions, True)}}
 
 
 def translate_via_metanetx(model, target, style="auto", pick_first=False):
@@ -188,10 +194,10 @@ def translate_via_metanetx(model, target, style="auto", pick_first=False):
     _, _, _, met_to_mnx = detect_metabolite_namespace_and_map(model)
     _, _, _, rxn_to_mnx = detect_reaction_namespace_and_map(model)
 
-    met_outcomes = _plan_metabolites(model, target, style, pick_first, met_to_mnx)
-    rxn_outcomes = _plan_reactions(model, target, style, pick_first, rxn_to_mnx, met_outcomes)
     label = TARGETS[target][0]
-    resolve_collisions(met_outcomes, label)
+    met_outcomes = _plan_metabolites(model, target, style, pick_first, met_to_mnx)
+    resolve_collisions(met_outcomes, label)  # first, so exchanges follow the metabolites that really got renamed
+    rxn_outcomes = _plan_reactions(model, target, style, pick_first, rxn_to_mnx, met_outcomes)
     resolve_collisions(rxn_outcomes, label)
     apply_renames(met_outcomes)
     apply_renames(rxn_outcomes)

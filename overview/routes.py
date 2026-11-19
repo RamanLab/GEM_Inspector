@@ -9,8 +9,11 @@ from pathlib import Path
 from flask import Blueprint, Response, jsonify, render_template, request, send_file
 from werkzeug.utils import secure_filename
 
-from core.shared import ALLOWED, MODEL_CACHE, load_uploaded_model, safe_float, store_original_file, touch_model_cache, wt_solution as solve_wt
-from diagnostics.diet import apply_diet_to_model, parse_diet_file
+from core.shared import ALLOWED, MODEL_CACHE, ORIGINAL_FILES, load_uploaded_model, safe_float, store_original_file, touch_model_cache, wt_solution as solve_wt
+import json
+
+from diagnostics.diet import apply_diet_to_model, entries_from_rows, parse_diet_file
+from diagnostics.media import get_medium, list_media
 from overview import background, memote_jobs
 from overview.analysis import analyze_model, quick_analyze, stream_ko_analysis
 
@@ -26,6 +29,19 @@ def index():
     return render_template("index.html", v=ASSET_VERSION)
 
 
+@overview_bp.get("/api/media")
+def api_media_list():
+    """The curated media offered in the diet dropdown."""
+    return jsonify({"media": list_media()})
+
+
+@overview_bp.get("/api/media/<key>")
+def api_media(key):
+    """One curated medium with default bounds, to fill the editable diet table."""
+    medium = get_medium(key)
+    return (jsonify(medium) if medium else (jsonify({"error": "Unknown medium."}), 404))
+
+
 @overview_bp.post("/api/analyze-quick")
 def api_analyze_quick():
     """Fast endpoint that returns stats without KO analysis."""
@@ -38,49 +54,72 @@ def api_analyze_quick():
     if not any(suffixes.endswith(ext) for ext in ALLOWED):
         return jsonify({"error": "Unsupported model format. Use SBML/XML, JSON, YAML, MATLAB .mat, or supported compressed SBML."}), 400
 
-    diet_mode = (request.form.get("diet_mode") or "none").strip().lower()
-    diet_file = request.files.get("diet_file")
-
     with tempfile.TemporaryDirectory() as tmp:
         path = Path(tmp) / filename
         uploaded.save(path)
-        try:
-            model = load_uploaded_model(path)
+        return _run_analysis(path)
 
-            diet_entries = None
-            if diet_mode == "custom":
-                if not diet_file or not diet_file.filename:
-                    return jsonify({"error": "Custom diet selected, but no diet file was uploaded."}), 400
-                try:
-                    diet_entries = parse_diet_file(diet_file)
-                except Exception as exc:
-                    return jsonify({"error": f"Could not read the diet file: {exc}"}), 400
-                if not diet_entries:
-                    return jsonify({"error": "The diet file didn't contain any usable (id, flux) rows."}), 400
 
-            diet_result = apply_diet_to_model(model, diet_mode, diet_entries)
+@overview_bp.post("/api/reanalyze/<model_id>")
+def api_reanalyze(model_id):
+    """Analyse an already uploaded model again under a different diet, without uploading it again."""
+    path = ORIGINAL_FILES.get(model_id)
+    if not path or not Path(path).exists():
+        return jsonify({"error": "The uploaded model is no longer on the server. Please upload it again."}), 404
+    return _run_analysis(Path(path))
 
-            result = quick_analyze(model)
-            result["diet"] = diet_result
 
-            # Store model in cache for streaming
-            model_id = str(uuid.uuid4())
-            MODEL_CACHE[model_id] = (model, time.time())
-            # Keep the untouched upload for MEMOTE (the cached model has the diet applied).
+def _run_analysis(path):
+    """Load the model file, apply the diet sent with the request, analyse, and cache the model."""
+    diet_mode = (request.form.get("diet_mode") or "none").strip().lower()
+    diet_file = request.files.get("diet_file")
+    try:
+        model = load_uploaded_model(path)
+
+        diet_entries = None
+        rows_json = request.form.get("diet_rows")
+        if diet_mode == "custom" and rows_json:   # the editable table (curated medium or edited file)
             try:
-                store_original_file(model_id, path)
-            except OSError:
-                pass
-            result["model_id"] = model_id
-            ok, info = memote_jobs.memote_available()
-            result["memote_available"] = ok
-            result["memote_message"] = None if ok else info
-            return jsonify(result)
-        except Exception as exc:
-            return jsonify({
-                "error": str(exc),
-                "hint": "For SBML, install python-libsbml. For MATLAB files, ensure the relevant COBRApy dependencies are installed."
-            }), 500
+                diet_entries = entries_from_rows(json.loads(rows_json))
+            except ValueError:
+                return jsonify({"error": "The diet table could not be read."}), 400
+            if not diet_entries:
+                return jsonify({"error": "The diet table has no usable rows (need an id and lower <= upper)."}), 400
+        elif diet_mode == "custom":
+            if not diet_file or not diet_file.filename:
+                return jsonify({"error": "Custom diet selected, but no diet file was uploaded."}), 400
+            try:
+                diet_entries = parse_diet_file(diet_file)
+            except Exception as exc:
+                return jsonify({"error": f"Could not read the diet file: {exc}"}), 400
+            if not diet_entries:
+                return jsonify({"error": "The diet file didn't contain any usable (id, flux) rows."}), 400
+
+        diet_result = apply_diet_to_model(model, diet_mode, diet_entries)
+
+        result = quick_analyze(model)
+        result["diet"] = diet_result
+
+        # Store model in cache for streaming
+        model_id = str(uuid.uuid4())
+        MODEL_CACHE[model_id] = (model, time.time())
+        # Keep the untouched upload for MEMOTE (the cached model has the diet applied).
+        try:
+            store_original_file(model_id, path)
+        except OSError:
+            pass
+        result["model_id"] = model_id
+        ok, info = memote_jobs.memote_available()
+        result["memote_available"] = ok
+        result["memote_message"] = None if ok else info
+        return jsonify(result)
+    except Exception as exc:
+        return jsonify({
+            "error": str(exc),
+            "hint": "For SBML, install python-libsbml. For MATLAB files, ensure the relevant COBRApy dependencies are installed."
+        }), 500
+
+
 
 
 @overview_bp.get("/api/analyze-ko/<model_id>")

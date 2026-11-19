@@ -154,7 +154,10 @@ def _job_thread(job):
         with open(os.path.join(job["dir"], "result.json"), encoding="utf-8") as fh:
             job["result"] = json.load(fh)
         if job.get("skipped_tests"):
-            job["result"].setdefault("meta", {})["skipped_slow_tests"] = sorted(job["skipped_tests"])
+            # MEMOTE scored the run without these tests, so the total is not for the full suite.
+            meta = job["result"].setdefault("meta", {})
+            meta["skipped_slow_tests"] = sorted(job["skipped_tests"])
+            meta["score_is_partial"] = True
         job["status"] = "done"
         job["finished"] = time.time()
     except Exception as exc:

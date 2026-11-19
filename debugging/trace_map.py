@@ -52,10 +52,12 @@ def _distances(adjacency, sources):
     return dist
 
 
-def find_routes(graph, starts, targets, max_levels, max_paths, slack=3):
+def find_routes(graph, starts, targets, max_levels, max_paths, slack=3, allow_direct=False):
     """Up to max_paths routes, shortest first: every route no longer than the
     shortest one plus `slack` reactions, never reusing a reaction or metabolite.
     The shortest routes are kept when more exist.
+    A metabolite that is both a start and a target (one reaction feeding the
+    next) is a route with no reactions between them when `allow_direct` is set.
     Returns [(start id, [(reaction id, next metabolite id), ...]), ...]."""
     forward = {m: [p for _, p in edges] for m, edges in graph.items()}
     reverse = {}
@@ -65,12 +67,14 @@ def find_routes(graph, starts, targets, max_levels, max_paths, slack=3):
     to_target = _distances(reverse, list(targets))
     from_start = _distances(forward, list(starts))
     reachable = [d for t, d in from_start.items() if t in targets]
-    if not reachable:
+    direct = [(o, []) for o in sorted(set(starts) & set(targets))] if allow_direct else []
+    if not reachable and not direct:
         return []
-    limit = min(max_levels, min(reachable) + slack)
-    routes, seen = [], set()
+    shortest = min(reachable) if reachable else 0
+    top = min(max_levels, shortest + slack)
+    routes, seen = list(direct), set()
 
-    def walk(origin, node, path, used):
+    def walk(origin, node, path, used, limit):
         if len(routes) >= 5 * max_paths:
             return
         if path and node in targets:
@@ -84,11 +88,16 @@ def find_routes(graph, starts, targets, max_levels, max_paths, slack=3):
                 continue
             if len(path) + 1 + to_target.get(nxt, 10 ** 6) > limit:
                 continue
-            walk(origin, nxt, path + [(rxn_id, nxt)], used | {nxt})
+            walk(origin, nxt, path + [(rxn_id, nxt)], used | {nxt}, limit)
 
-    for origin in starts:
-        if origin not in targets:
-            walk(origin, origin, [], {origin})
+    # Allow one more reaction at a time, so the shortest routes are found before
+    # the search can fill up with longer detours.
+    for limit in range(max(shortest, 1), top + 1):
+        for origin in starts:
+            if origin not in targets:
+                walk(origin, origin, [], {origin}, limit)
+        if len(routes) >= max_paths:
+            break
     routes.sort(key=lambda r: len(r[1]))
     return routes[:max_paths]
 
@@ -133,8 +142,9 @@ def trace_map(model, wt, ko, start, target, mode, hops, max_levels, max_paths, c
         return {"error": err}
 
     graph = downstream_graph(model, wt, trivial_ids, mode)
-    found = find_routes(graph, starts, set(targets), max_levels, max_paths)
-    paths = [format_flux_path(model, wt, model.metabolites.get_by_id(s), route, None, compartment_names)
+    found = find_routes(graph, starts, set(targets), max_levels, max_paths, allow_direct=bool(start_rxn or target_rxn))
+    paths = [format_flux_path(model, wt, model.metabolites.get_by_id(s), route, None, compartment_names,
+                              {x.lower() for x in extra_mets})
              for s, route in found]
 
     primary_rxns = {r["id"] for p in paths for r in p["reactions"]} | {x for x in (start_rxn, target_rxn) if x}

@@ -142,7 +142,10 @@ def _network_arrays(model):
     exchange_ids = {e.id for e in model.exchanges}
     exchange = np.array([r.id in exchange_ids for r in model.reactions])
     lb[exchange], ub[exchange] = np.minimum(lb[exchange], -OPEN), np.maximum(ub[exchange], OPEN)
-    return S, lb, ub
+    # Forced flux (a positive lower bound such as ATPM >= 3.15, or a negative upper bound) is a demand on the
+    # network, not part of its structure. On a draft model whose ATP regeneration is broken it would make the
+    # whole problem infeasible, so connectivity is judged with every bound relaxed to include zero.
+    return S, np.minimum(lb, 0.0), np.maximum(ub, 0.0)
 
 
 def compute_dead_ends(model):
