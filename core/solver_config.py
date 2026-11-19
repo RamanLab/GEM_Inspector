@@ -37,18 +37,29 @@ def processes():
     return _int_env("GEM_PROCESSES", 1 if os.name == "nt" else min(4, _cores()))
 
 
+FAILURES = {}   # solver name -> why it was rejected, shown at startup
+
+
 def _works(name):
     """True when the solver imports AND solves a tiny problem (this also
     catches a missing or expired licence, which only fails at first use)."""
     try:
         from cobra.util.solver import solvers
+        if name not in solvers:
+            if name == "gurobi":
+                FAILURES[name] = "COBRApy/optlang could not load it (is gurobipy installed in this same Python environment?)"
+            return False
         iface = solvers[name]
         problem = iface.Model()
         x = iface.Variable("x", lb=0, ub=1)
         problem.add(x)
         problem.objective = iface.Objective(x, direction="max")
-        return problem.optimize() == "optimal"
-    except Exception:
+        status = problem.optimize()
+        if status != "optimal":
+            FAILURES[name] = f"a test problem returned status '{status}'"
+        return status == "optimal"
+    except Exception as exc:
+        FAILURES[name] = f"{type(exc).__name__}: {exc}"
         return False
 
 
@@ -113,7 +124,8 @@ def configure(solver=None, threads_=None, processes_=None):
 def describe():
     """One-line startup summary."""
     return (f"solver={solver_name()} (MILP: {milp_solver_name()}), threads={threads()}, "
-            f"processes={processes()}; available: {', '.join(available_solvers()) or 'none'}")
+            f"processes={processes()}; available: {', '.join(available_solvers()) or 'none'}"
+            + "".join(f"\n  {n} not used: {FAILURES[n]}" for n in ("gurobi", "cplex") if n in FAILURES and n not in available_solvers()))
 
 
 def prompt_choice():
@@ -122,5 +134,8 @@ def prompt_choice():
     if len(usable) < 2:
         return None
     print("Solvers found:", ", ".join(usable))
+    for name in PREFERENCE:
+        if name in FAILURES and name not in usable and name in ("gurobi", "cplex"):
+            print(f"  {name} was not used: {FAILURES[name]}")
     answer = input(f"Solver to use [auto = {usable[0]}; or {'/'.join(usable)}]: ").strip().lower()
     return answer if answer in usable else None

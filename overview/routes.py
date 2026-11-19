@@ -2,6 +2,7 @@
 tabs: upload + diet application, quick stats, and streamed KO analysis.
 """
 import tempfile
+import traceback
 import time
 import uuid
 from pathlib import Path
@@ -114,6 +115,7 @@ def _run_analysis(path):
         result["memote_message"] = None if ok else info
         return jsonify(result)
     except Exception as exc:
+        traceback.print_exc()   # the full error in the terminal, not only the short message in the page
         return jsonify({
             "error": str(exc),
             "hint": "For SBML, install python-libsbml. For MATLAB files, ensure the relevant COBRApy dependencies are installed."

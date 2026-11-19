@@ -21,6 +21,10 @@ docs
 docs/TODO.md
 docs/REFERENCES.md
 
+# other big files
+data/chem_prop.tsv
+
+
 # For later
 documentation/benchmarks.md
 
