@@ -96,7 +96,8 @@ def api_debug_exchange_map():
             },
             "paths": before.get("paths", []),
             "map": build_exchange_map(model, exchange_id, biomass_id, before.get("paths", []), wt, ko_flux,
-                                      currency, hide_trivial, hops, compartment_names),
+                                      currency, hide_trivial, hops, compartment_names,
+                                      bool(data.get("show_biomass_components"))),
         })
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500

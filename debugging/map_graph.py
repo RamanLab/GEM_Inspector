@@ -65,9 +65,10 @@ def _rxn_record(rxn, types, wt, ko, trivial_ids, shown, hop, primary, extra, bio
 
 def build_map(model, types, wt, ko, compartment_names, trivial_ids, primary_rxns, primary_mets,
               start_ids=(), target_ids=(), extra_rxns=(), biomass_id=None, drawn=None,
-              hops=1, max_reactions=300):
+              hops=1, max_reactions=300, expand_biomass=False):
     """primary_rxns / primary_mets: the route. `drawn` maps a reaction id to the
-    only metabolites to draw for it (used to keep the biomass reaction readable).
+    only metabolites to draw for it (used to keep the biomass reaction readable);
+    `expand_biomass` also draws every non-cofactor metabolite of the biomass reaction.
     ko: the knockout flux solution, or None when growth is lost (no meaningful
     flux then, so every reaction counts as inactive after the knockout)."""
     drawn = drawn or {}
@@ -101,6 +102,8 @@ def build_map(model, types, wt, ko, compartment_names, trivial_ids, primary_rxns
     for rid in included:
         if rid != biomass_id and rid not in drawn:
             met_ids.update(m.id for m in model.reactions.get_by_id(rid).metabolites if m.id not in trivial_ids)
+    if expand_biomass and biomass_id in included:
+        met_ids.update(m.id for m in model.reactions.get_by_id(biomass_id).metabolites if m.id not in trivial_ids)
     shown = (met_ids - trivial_ids) | set(start_ids) | set(target_ids)
 
     extra_rxns = set(extra_rxns)

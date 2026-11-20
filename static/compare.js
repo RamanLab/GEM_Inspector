@@ -35,9 +35,17 @@ function renderModelCompare() {
     </div>
     <div id="compareStatus" class="debug-status"></div>
     <div id="compareResults"></div>
+    <div class="bench-sec">
+      <h3>In-depth benchmark</h3>
+      <div class="note">Goes further than the lists above: reactions and metabolites matched by formula, charge and stoichiometry (not only by id) with Jaccard scores,
+        biomass components, GAM/NGAM, uptake and secretion, main carbon and nitrogen source, essential exchanges and FVA flux ranges of the core carbon reactions.
+        Model A is the loaded model.</div>
+      ${benchControlsHtml("cmpb")}
+    </div>
   `;
   $("compareFile").addEventListener("change", () => { $("compareRunBtn").disabled = !$("compareFile").files[0]; });
   $("compareRunBtn").addEventListener("click", runModelCompare);
+  benchSetup("cmpb", { name: (typeof MODEL_NAME !== "undefined" && MODEL_NAME) || "Loaded model", id: () => MODEL_ID });
 }
 
 async function runModelCompare() {

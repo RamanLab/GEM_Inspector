@@ -6,6 +6,7 @@ from pathlib import Path
 
 from flask import Blueprint, Response, jsonify, request
 
+from annotation.mapping_export import mapping_files, mapping_zip
 from annotation.metanetx_translation import TARGETS, translate_via_metanetx
 from annotation.naming import TRIVIAL_METABOLITES
 from annotation.seed_to_vmh import translate_seed_to_vmh
@@ -138,3 +139,24 @@ def api_translate_metanetx():
 @annotation_bp.get("/api/translate-metanetx/<model_id>/download")
 def api_translate_metanetx_download(model_id):
     return _download_response(MNX_TRANSLATIONS, model_id)
+
+
+@annotation_bp.get("/api/id-mappings/<model_id>")
+def api_id_mappings(model_id):
+    """Download every metabolite / reaction of the loaded model with its ids in all databases:
+    ?what=metabolites | reactions | zip (both files)."""
+    if model_id not in MODEL_CACHE:
+        return jsonify({"error": "Model not found or expired. Please re-run the initial analysis."}), 404
+    touch_model_cache(model_id)
+    model, _ = MODEL_CACHE[model_id]
+    what = request.args.get("what", "zip")
+    try:
+        if what == "zip":
+            body, mime, name = mapping_zip(model), "application/zip", "id_mappings.zip"
+        else:
+            files = mapping_files(model)
+            name = "metabolite_id_mapping.tsv" if what == "metabolites" else "reaction_id_mapping.tsv"
+            body, mime = files[name].encode("utf-8"), "text/tab-separated-values"
+    except Exception as exc:
+        return jsonify({"error": f"Could not build the mapping table: {exc}"}), 500
+    return Response(body, mimetype=mime, headers={"Content-Disposition": f'attachment; filename="{name}"'})

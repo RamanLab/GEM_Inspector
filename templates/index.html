@@ -28,6 +28,11 @@
         <strong>Analyze multiple models</strong>
         <span>Upload two to five models for a side-by-side comparison with quality findings, reported as Excel and HTML.</span>
       </button>
+      <button type="button" class="choice-card" id="chooseBench">
+        <span class="choice-icon">B</span>
+        <strong>Benchmark / compare models</strong>
+        <span>Compare two to six models by reactions and metabolites (formula, charge, MetaNetX), biomass, maintenance, uptake and secretion, essential exchanges and core-carbon flux ranges.</span>
+      </button>
     </div>
     <div class="legend">
       <span class="legend-title">Toolkit modules</span>
@@ -69,6 +74,46 @@
     <span id="status"></span>
     <div class="progress-track" id="mainProgress" style="display:none;"><div class="progress-fill"></div></div>
     </section>
+  </section>
+
+  <!-- Benchmark / compare models. -->
+  <section id="viewBench" class="view hidden">
+  <button type="button" class="back-link" data-go="home">&larr; Back</button>
+  <section class="upload-card" id="benchCard">
+    <h2>Benchmark / compare models</h2>
+    <p class="muted">Upload two to six models. Reactions and metabolites are matched by id, MetaNetX id, then formula and charge (metabolites) or stoichiometry (reactions), so differently named models still line up.</p>
+    <div class="warn-box"><strong>Use the same uptake medium.</strong> Growth, uptake, essentiality and flux ranges depend on the medium.
+      Either make sure every model already has the same medium, or choose a base medium below and edit it (change bounds, remove or add uptakes); it is applied to every model.</div>
+    <label class="dropzone" id="benchDropzone">
+      <input id="benchFiles" type="file" multiple accept=".xml,.sbml,.json,.yml,.yaml,.mat,.gz,.zip,.bz2">
+      <strong>Drop two to six models here</strong>
+      <span>or click to choose several files</span>
+    </label>
+    <div id="benchFileList" class="muted"></div>
+    <div class="bench-opts">
+      <label>Mode
+        <select id="benchMode"><option value="all">Compare all against each other</option><option value="reference">Benchmark against one reference model</option></select>
+      </label>
+      <label id="benchRefWrap" class="hidden">Reference model <select id="benchRef"></select></label>
+      <label>Medium
+        <select id="benchMedium"><option value="own">Each model's own medium</option></select>
+      </label>
+      <label>FVA fraction of optimum <input id="benchFraction" type="number" min="0" max="1" step="0.05" value="1"></label>
+    </div>
+    <div id="benchMediumBox" class="hidden">
+      <div class="table-wrap"><table class="data"><thead><tr><th>Metabolite</th><th>Name</th><th>Lower bound</th><th>Upper bound</th><th></th></tr></thead><tbody id="benchMediumBody"></tbody></table></div>
+      <div class="toolbar"><input id="benchAddId" placeholder="metabolite id, e.g. glc__D"> <button type="button" class="secondary" id="benchAddBtn">Add uptake</button></div>
+    </div>
+    <details class="bench-core"><summary>Core carbon reactions (editable list, BiGG ids)</summary>
+      <textarea id="benchCore" rows="5"></textarea>
+      <p class="muted">Matched across models by id or MetaNetX id; FVA is run only for these.</p>
+    </details>
+    <p class="muted">More than six models? <a href="/api/benchmark/script" download>Download the stand-alone script</a>, run it locally from a copy of this repository and open the Excel report it writes.</p>
+    <button id="benchBtn" disabled>Run benchmark</button>
+    <span id="benchStatus"></span>
+    <div class="progress-track" id="benchProgress" style="display:none;"><div class="progress-fill"></div></div>
+    <div id="benchResults"></div>
+  </section>
   </section>
 
   <!-- Multiple models: upload step. -->
@@ -262,6 +307,7 @@ EX_h_e,-1000,1000</pre>
 <script src="/static/balance_audit.js?v={{ v }}"></script>
 <script src="/static/report_common.js?v={{ v }}"></script>
 <script src="/static/multi_models.js?v={{ v }}"></script>
+<script src="/static/benchmark.js?v={{ v }}"></script>
 <script src="/static/views.js?v={{ v }}"></script>
 </body>
 </html>

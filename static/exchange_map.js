@@ -41,6 +41,7 @@ function renderDebugDefault(exchanges) {
         <option value="0">0 – route only</option><option value="1" selected>1</option>
         <option value="2">2</option><option value="3">3</option></select></label>
       <label class="debug-toggle"><input type="checkbox" id="xmapHideTrivial" checked> Hide cofactors (H, H2O, ATP/ADP, NAD(H), Pi…)</label>
+      <label class="debug-toggle"><input type="checkbox" id="xmapBiomassMets"> Show biomass components (otherwise the route stops at the biomass reaction)</label>
       ${currencyEditButton()}
       <button id="xmapRun" type="button" style="margin-left:auto;" disabled>Visualize</button>
     </div>
@@ -75,6 +76,7 @@ async function runExchangeMap() {
       body: JSON.stringify({
         model_id: MODEL_ID, exchange_id: XMAP.selected, hops: Number($("xmapHops").value),
         exclude_trivial_metabolites: $("xmapHideTrivial").checked, currency_metabolites: currencyPayload(),
+        show_biomass_components: $("xmapBiomassMets").checked,
       }),
     });
     const data = await res.json();

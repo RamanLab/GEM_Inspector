@@ -68,7 +68,7 @@ function renderModuleGrid() {
     </article>`).join("");
 }
 
-const VIEWS = { home: "viewHome", single: "viewSingle", multi: "viewMulti", results: "app" };
+const VIEWS = { home: "viewHome", single: "viewSingle", multi: "viewMulti", bench: "viewBench", results: "app" };
 
 function showView(name) {
   Object.entries(VIEWS).forEach(([key, id]) => $(id).classList.toggle("hidden", key !== name));
@@ -98,6 +98,7 @@ function resetSingleUpload() {
   renderModuleGrid();
   $("chooseSingle").addEventListener("click", () => showView("single"));
   $("chooseMulti").addEventListener("click", () => showView("multi"));
+  $("chooseBench").addEventListener("click", () => showView("bench"));
   document.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => showView(b.dataset.go)));
   $("homeLink").addEventListener("click", (ev) => { ev.preventDefault(); showView("home"); });
   $("newModelBtn").addEventListener("click", () => { showView("single"); resetSingleUpload(); });

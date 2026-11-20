@@ -498,3 +498,26 @@ td.num, th[data-key="lower_bound"], th[data-key="upper_bound"], th[data-key="wt_
 .maint-value.muted { color:var(--muted); font-weight:600; }
 .maint-sub { margin-top:6px; font-size:13px; color:var(--muted); }
 .maint-warn { margin:0; }
+.button-link { display:inline-block; padding:8px 14px; border-radius:10px; background:#e2e8f0; color:#0f172a; font-weight:600; text-decoration:none; }
+.button-link:hover { background:#cbd5e1; }
+
+/* Benchmark / compare models */
+.bench-opts { display:flex; flex-wrap:wrap; gap:14px; margin:14px 0; }
+.bench-opts label { display:flex; flex-direction:column; gap:4px; font-size:13px; font-weight:600; }
+.bench-core textarea { width:100%; font-family:monospace; }
+.bench-sec { margin-top:22px; }
+.bench-sec h3 { margin:0 0 8px; }
+.bench-diff td { background:#fffbeb; }
+.bench-matrix td, .bench-matrix th { text-align:center; }
+.bench-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+#benchMediumBox .table-wrap { max-height:320px; overflow:auto; }
+#benchMediumBox input { width:100px; }
+.bench-core { display:block; margin:12px 0; }
+/* keep wide result tables inside the card (the upload card is a wrapping flex row) */
+#benchResults, #cmpbResults { flex:1 0 100%; width:100%; min-width:0; }
+#benchResults .table-wrap, #cmpbResults .table-wrap { max-width:100%; }
+#benchResults th, #cmpbResults th { white-space:normal; min-width:90px; }
+#benchResults table, #cmpbResults table { width:auto; min-width:100%; }
+#benchCard { display:block; }
+#benchCard > * { margin-bottom:12px; }
+#benchMediumBox, #cmpbMediumBox { margin-bottom:12px; }

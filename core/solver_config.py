@@ -50,16 +50,22 @@ def _works(name):
                 FAILURES[name] = "COBRApy/optlang could not load it (is gurobipy installed in this same Python environment?)"
             return False
         iface = solvers[name]
+        # Gurobi and CPLEX free (size-limited) licences solve small problems but refuse genome-scale
+        # ones, so those two are tested with a problem larger than their limits (2000 / 1000).
+        size = 2100 if name in ("gurobi", "cplex") else 1
         problem = iface.Model()
-        x = iface.Variable("x", lb=0, ub=1)
-        problem.add(x)
-        problem.objective = iface.Objective(x, direction="max")
+        xs = [iface.Variable(f"x{i}", lb=0, ub=1) for i in range(size)]
+        problem.add(xs)
+        problem.add([iface.Constraint(xs[i] + xs[(i + 1) % size], ub=1.5, name=f"c{i}") for i in range(size)] if size > 1 else [])
+        problem.objective = iface.Objective(sum(xs), direction="max")
         status = problem.optimize()
         if status != "optimal":
             FAILURES[name] = f"a test problem returned status '{status}'"
         return status == "optimal"
     except Exception as exc:
-        FAILURES[name] = f"{type(exc).__name__}: {exc}"
+        FAILURES[name] = f"{type(exc).__name__}: {exc}" + (
+            " (a free, size-limited licence cannot solve genome-scale models; use a full or academic licence)"
+            if name in ("gurobi", "cplex") else "")
         return False
 
 

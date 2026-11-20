@@ -27,6 +27,7 @@ variables (one worker: the model cache lives in process memory).
 from flask import Flask
 
 from annotation.routes import annotation_bp
+from benchmark.routes import benchmark_bp
 from comparative.routes import comparative_bp
 from core.reporting import reporting_bp
 from core import solver_config
@@ -45,6 +46,7 @@ app.register_blueprint(diagnostics_bp)
 app.register_blueprint(debugging_bp)
 app.register_blueprint(annotation_bp)
 app.register_blueprint(comparative_bp)
+app.register_blueprint(benchmark_bp)
 app.register_blueprint(reporting_bp)
 
 start_model_cache_cleanup()

@@ -696,6 +696,15 @@ function renderAnnotation() {
       ${annotationCardHtml("Compartment annotation", conv.label, conv.example, null)}
     </div>
     ${namespaceAuditWarningsHtml(15)}
+    <h3>Download all ID mappings</h3>
+    <p class="memote-desc">Every metabolite and every reaction of this model with its MetaNetX id and its ids in BiGG, VMH, ModelSEED, KEGG and MetaCyc
+      (several ids for one compound are separated by “;”). Metabolites are matched without their compartment tag. If MetaNetX's <code>chem_prop.tsv</code>
+      is in the data folder, its reference name, formula and charge are added for comparison.</p>
+    <div class="toolbar">
+      <a class="button-link" href="/api/id-mappings/${MODEL_ID}?what=metabolites">Metabolites (TSV)</a>
+      <a class="button-link" href="/api/id-mappings/${MODEL_ID}?what=reactions">Reactions (TSV)</a>
+      <a class="button-link" href="/api/id-mappings/${MODEL_ID}?what=zip">Both (ZIP)</a>
+    </div>
   `;
 }
 

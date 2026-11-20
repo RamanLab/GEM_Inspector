@@ -10,9 +10,12 @@
 // network_map.js. renderExplorer() is called by renderTracer().
 // ---------------------------------------------------------------------------
 const EXP = { cy: null, busy: false };
+const EXP_UNDO = [];   // the graph as it was before each change, newest last
+const EXP_UNDO_MAX = 30;
 
 function renderExplorer() {
   EXP.cy = null;
+  EXP_UNDO.length = 0;
   $("trcExploreView").innerHTML = `
     <div class="note">
       Draw your own graph. Pick a <strong>metabolite or reaction</strong> to start, then click a node and expand it
@@ -49,6 +52,7 @@ function renderExplorer() {
         <button type="button" class="secondary" data-act="png">PNG</button>
         <button type="button" class="secondary" data-act="csv" title="Download the nodes drawn, with their diagnostics">CSV</button>
         <button type="button" class="secondary" data-act="clear">Clear</button>
+        <button type="button" class="secondary" id="expUndo" title="Undo the last change (Ctrl+Z)" disabled>↶ Undo</button>
       </span>
       <span id="expCount" class="stoich"></span>
     </div>
@@ -82,6 +86,7 @@ function renderExplorer() {
   $("expColour").addEventListener("change", expApplyView);
   $("expLayout").addEventListener("change", expTidy);
   $("expFind").addEventListener("input", expFind);
+  $("expUndo").addEventListener("click", expUndo);
   $("trcExploreView").querySelectorAll(".map-zoom button").forEach(b => b.addEventListener("click", () => expAction(b.dataset.act)));
 }
 
@@ -227,13 +232,44 @@ async function expTraceBreak() {
   EXP.cy.fit(EXP.cy.elements().not(".xmap-hidden"), 40);
 }
 
+// ---- undo -----------------------------------------------------------------
+function expSnapshot() {
+  EXP_UNDO.push(EXP.cy ? EXP.cy.elements().jsons() : []);
+  if (EXP_UNDO.length > EXP_UNDO_MAX) EXP_UNDO.shift();
+  expUndoState();
+}
+
+function expUndoState() {
+  const b = $("expUndo");
+  if (b) b.disabled = !EXP_UNDO.length || EXP.busy;
+}
+
+function expUndo() {
+  const cy = EXP.cy;
+  if (!cy || EXP.busy || !EXP_UNDO.length) return;
+  const before = EXP_UNDO.pop();
+  cy.elements().remove();
+  if (before.length) cy.add(before);
+  expApplyView();
+  $("expSide").innerHTML = '<div class="stoich">Undone. Click a node to see its details and expand it.</div>';
+  $("expStatus").textContent = "";
+  expUndoState();
+}
+
+document.addEventListener("keydown", ev => {
+  if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z" && !/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)
+      && $("expUndo") && $("expUndo").offsetParent !== null) { ev.preventDefault(); expUndo(); }
+});
+
 async function expBusy(fn) {
   if (EXP.busy) return;
   EXP.busy = true;
+  expSnapshot();
+  const depth = EXP_UNDO.length;
   progressStart("expProgress");
   try { $("expStatus").textContent = ""; await fn(); }
-  catch (err) { $("expStatus").innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`; }
-  finally { EXP.busy = false; progressDone("expProgress"); }
+  catch (err) { if (EXP_UNDO.length === depth) { EXP_UNDO.pop(); } $("expStatus").innerHTML = `<span class="error">${escapeHtml(err.message)}</span>`; }
+  finally { EXP.busy = false; progressDone("expProgress"); expUndoState(); }
 }
 
 // ---- view: colours, problem-area filter, layout, search --------------------
@@ -289,7 +325,7 @@ function expAction(act) {
   else if (act === "fit") cy.fit(cy.elements().not(".xmap-hidden"), 30);
   else if (act === "png") { const a = document.createElement("a"); a.href = cy.png({ full: true, scale: 2, bg: "#ffffff" }); a.download = "explorer_graph.png"; a.click(); }
   else if (act === "csv") expCsv();
-  else if (act === "clear") { cy.elements().remove(); expApplyView(); $("expSide").innerHTML = '<div class="stoich">Click a node to see its details and expand it.</div>'; $("expStatus").textContent = ""; }
+  else if (act === "clear") { expSnapshot(); cy.elements().remove(); expApplyView(); $("expSide").innerHTML = '<div class="stoich">Click a node to see its details and expand it.</div>'; $("expStatus").textContent = ""; }
 }
 
 function expCsv() {
@@ -353,6 +389,7 @@ function expSelect(n) {
   if (t) t.addEventListener("click", () => expBusy(async () => { await expTestMetabolites([n]); expSelect(n); }));
   side.querySelector("[data-r]").addEventListener("click", () => {
     const cy = EXP.cy;
+    expSnapshot();
     n.remove();
     cy.nodes().filter(x => x.connectedEdges().empty() && !x.hasClass("seed")).remove();  // orphans left behind
     expApplyView();
